@@ -70,7 +70,7 @@ class MainActivity : ComponentActivity() {
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) showPrinters = true else toast = "Izin Bluetooth diperlukan untuk mencetak" }
     val saveNoteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         val sale = receipt
-        if (uri != null && sale != null) runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(receiptText(sale, settings).toByteArray()) } }.onSuccess { toast = "Nota disimpan" }.onFailure { toast = "Gagal menyimpan nota" }
+        if (uri != null && sale != null) runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(receiptText(sale, settings ?: StoreSettings()).toByteArray()) } }.onSuccess { toast = "Nota disimpan" }.onFailure { toast = "Gagal menyimpan nota" }
     }
     val filtered = remember(sales, query, selectedDate) { sales.filter { sale ->
         (sale.name.contains(query, true) || sale.note.contains(query, true)) && (selectedDate == null || sameDay(sale.createdAt, selectedDate!!))
@@ -134,10 +134,11 @@ class MainActivity : ComponentActivity() {
         }
         Spacer(Modifier.height(18.dp)); Row(verticalAlignment = Alignment.CenterVertically) { Text("Terbaru", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Ink); Spacer(Modifier.weight(1f)); TextButton(onClick = { }) { Text("${sales.size} transaksi") } }
         if (sales.isEmpty()) EmptyState("Belum ada transaksi", "Mulai dengan mencatat penjualan pertama.", onAdd)
-        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 90.dp)) { items(sales.take(12), key = { it.id }) { SaleRow(it, onReceipt) } }
+        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 90.dp)) { items(sales.take(12), key = { it.id }) { sale -> SaleRow(sale, { onReceipt(sale) }) } }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun HistoryPage(sales: List<Sale>, query: String, selectedDate: Long?, onQuery: (String) -> Unit, onDate: (Long?) -> Unit, onReceipt: (Sale) -> Unit, onEdit: (Sale) -> Unit, onDelete: (Sale) -> Unit) {
     var dateDialog by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
@@ -322,7 +323,7 @@ private fun receiptText(sale: Sale, settings: StoreSettings) = buildString {
 
 private fun backupJson(context: Context, sales: List<Sale>, settings: StoreSettings): String {
     val list = JSONArray(); sales.forEach { list.put(JSONObject().put("name", it.name).put("price", it.price).put("quantity", it.quantity).put("note", it.note).put("createdAt", it.createdAt).put("favorite", it.favorite)) }
-    fun image(uri: String): String = if (uri.isBlank()) "" else runCatching { context.contentResolver.openInputStream(Uri.parse(uri))?.use { android.util.Base64.encodeToString(it.readBytes(), android.util.Base64.NO_WRAP) } }.getOrDefault("")
+    fun image(uri: String): String = if (uri.isBlank()) "" else runCatching { context.contentResolver.openInputStream(Uri.parse(uri))?.use { android.util.Base64.encodeToString(it.readBytes(), android.util.Base64.NO_WRAP) } }.getOrNull().orEmpty()
     return JSONObject().put("format", "gerai-go-backup").put("version", 1).put("transactions", list).put("settings", JSONObject().put("name", settings.name).put("address", settings.address).put("contact", settings.contact).put("header", settings.header).put("footer", settings.footer).put("logoUri", settings.logoUri).put("extraImageUri", settings.extraImageUri).put("logoImage", image(settings.logoUri)).put("extraImage", image(settings.extraImageUri)).put("showLogo", settings.showLogo).put("showExtraImage", settings.showExtraImage).put("imageWidth", settings.imageWidth).put("paperWidth", settings.paperWidth)).toString(2)
 }
 private fun restoreImages(context: Context, j: JSONObject): StoreSettings {
