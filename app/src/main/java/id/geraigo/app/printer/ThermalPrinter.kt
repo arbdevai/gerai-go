@@ -6,7 +6,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import id.geraigo.app.data.Sale
+import id.geraigo.app.data.OrderReceipt
 import id.geraigo.app.data.StoreSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -16,7 +16,7 @@ object ThermalPrinter {
     private val spp = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
     fun pairedDevices(context: Context) = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter?.bondedDevices?.sortedBy { it.name }.orEmpty()
 
-    suspend fun print(context: Context, address: String, sale: Sale, settings: StoreSettings) = withContext(Dispatchers.IO) {
+    suspend fun print(context: Context, address: String, receipt: OrderReceipt, settings: StoreSettings) = withContext(Dispatchers.IO) {
         val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter ?: error("Bluetooth tidak tersedia")
         val device = adapter.getRemoteDevice(address)
         val socket = device.createRfcommSocketToServiceRecord(spp)
@@ -35,12 +35,17 @@ object ThermalPrinter {
             out.write(byteArrayOf(0x1b, 0x61, 0))
             val columns = if (settings.paperWidth == 80) 48 else 32
             line(out, "-".repeat(columns))
-            line(out, sale.name)
-            line(out, "${sale.quantity} x ${sale.price}", sale.total.toString(), columns)
-            if (sale.note.isNotBlank()) line(out, "Catatan: ${sale.note}")
+            receipt.items.forEach { item ->
+                line(out, item.name)
+                line(out, "${item.quantity} x ${money(item.price)}", money(item.total), columns)
+            }
+            if (receipt.note.isNotBlank()) line(out, "Catatan: ${receipt.note}")
             line(out, "-".repeat(columns))
-            line(out, "TOTAL", sale.total.toString(), columns)
-            line(out, "Waktu", java.text.SimpleDateFormat("dd/MM/yy HH:mm", java.util.Locale("id", "ID")).format(java.util.Date(sale.createdAt)), columns)
+            line(out, "Subtotal", money(receipt.subtotal), columns)
+            if (receipt.taxAmount > 0) line(out, "Pajak ${receipt.taxPercent}%", money(receipt.taxAmount), columns)
+            if (receipt.adminAmount > 0) line(out, "Biaya admin ${receipt.adminPercent}%", money(receipt.adminAmount), columns)
+            line(out, "TOTAL", money(receipt.total), columns)
+            line(out, "Waktu", java.text.SimpleDateFormat("dd/MM/yy HH:mm", java.util.Locale("id", "ID")).format(java.util.Date(receipt.createdAt)), columns)
             if (settings.showExtraImage && settings.extraImageUri.isNotBlank()) {
                 out.write(byteArrayOf(0x1b, 0x61, 1))
                 printImage(context, out, Uri.parse(settings.extraImageUri), settings.imageWidth, settings.paperWidth)
@@ -58,6 +63,7 @@ object ThermalPrinter {
         val l = ascii(left).take(columns); val r = ascii(right).take(columns)
         out.write((l + " ".repeat((columns - l.length - r.length).coerceAtLeast(1)) + r + "\n").toByteArray(Charsets.US_ASCII))
     }
+    private fun money(value: Long) = "Rp " + java.text.NumberFormat.getNumberInstance(java.util.Locale("id", "ID")).format(value)
     private fun ascii(text: String) = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD).replace("\\p{Mn}+".toRegex(), "").replace("[^\\x20-\\x7E]".toRegex(), "?")
 
     private fun printImage(context: Context, out: java.io.OutputStream, uri: Uri, requestedWidth: Int, paper: Int) {
