@@ -528,15 +528,16 @@ private fun shareReceiptImage(context: Context, receipt: OrderReceipt, settings:
 }
 
 private fun receiptText(receipt: OrderReceipt, settings: StoreSettings) = buildString {
+    fun percent(value: Double) = if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
     appendLine(settings.name.ifBlank { "Gerai Go" }); if (settings.address.isNotBlank()) appendLine(settings.address); if (settings.contact.isNotBlank()) appendLine(settings.contact)
-    if (settings.header.isNotBlank()) appendLine(settings.header); appendLine("------------------------------"); appendLine("NOTA PENJUALAN"); appendLine("No. nota: GG-${receipt.key.takeLast(6).uppercase()}"); appendLine(dateTimeLabel(receipt.createdAt)); appendLine("------------------------------")
-    appendLine("RINCIAN BARANG")
-    receipt.items.forEachIndexed { index, item -> appendLine("${index + 1}. ${item.name}"); appendLine("${item.quantity} x ${rupiah(item.price)} = ${rupiah(item.total)}") }
+    if (settings.header.isNotBlank()) appendLine(settings.header); appendLine(".............................."); appendLine("NOTA PENJUALAN"); appendLine("No. nota: GG-${receipt.key.takeLast(6).uppercase()}"); appendLine(dateTimeLabel(receipt.createdAt)); appendLine("..............................")
+    appendLine("BARANG (${receipt.items.size})")
+    receipt.items.forEachIndexed { index, item -> appendLine("${index + 1}. ${item.name}"); appendLine("${item.quantity} x ${rupiah(item.price)}   ${rupiah(item.total)}") }
     if (receipt.note.isNotBlank()) appendLine("Catatan: ${receipt.note}")
-    appendLine("------------------------------"); appendLine("RINGKASAN PEMBAYARAN"); appendLine("Jenis barang: ${receipt.items.size}"); appendLine("Total kuantitas: ${receipt.items.sumOf { it.quantity }}"); appendLine("Subtotal: ${rupiah(receipt.subtotal)}")
-    if (receipt.taxPercent > 0.0 || receipt.taxAmount > 0) appendLine("Pajak ${receipt.taxPercent}%: ${rupiah(receipt.taxAmount)}")
-    if (receipt.adminPercent > 0.0 || receipt.adminAmount > 0) appendLine("Biaya admin ${receipt.adminPercent}%: ${rupiah(receipt.adminAmount)}")
-    appendLine("TOTAL BAYAR: ${rupiah(receipt.total)}"); appendLine("------------------------------"); if (settings.footer.isNotBlank()) appendLine(settings.footer)
+    appendLine(".............................."); appendLine("Ringkasan"); appendLine("Total kuantitas: ${receipt.items.sumOf { it.quantity }} pcs"); appendLine("Subtotal: ${rupiah(receipt.subtotal)}")
+    if (receipt.taxPercent > 0.0 || receipt.taxAmount > 0) appendLine("Pajak ${percent(receipt.taxPercent)}%: ${rupiah(receipt.taxAmount)}")
+    if (receipt.adminPercent > 0.0 || receipt.adminAmount > 0) appendLine("Biaya admin ${percent(receipt.adminPercent)}%: ${rupiah(receipt.adminAmount)}")
+    appendLine("TOTAL BAYAR: ${rupiah(receipt.total)}"); appendLine(".............................."); if (settings.footer.isNotBlank()) appendLine(settings.footer)
 }
 
 private fun renderReceiptImage(context: Context, receipt: OrderReceipt, settings: StoreSettings): java.io.File {
