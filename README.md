@@ -12,7 +12,7 @@ Workflow GitHub Actions membangun APK release setelah perubahan didorong ke bran
 - Data transaksi offline dengan Room, daftar/pencarian riwayat, hapus, dan preview nota.
 - Dashboard pendapatan hari ini, mingguan, bulanan, jumlah transaksi, grafik tren, dan ringkasan item.
 - Navigasi Kas, Riwayat, Dashboard, dan Pengaturan.
-- GitHub Actions hanya menjalankan `assembleRelease` (tanpa unit test), memakai cache Gradle, dan mengunggah APK sebagai artifact selama 30 hari.
+- GitHub Actions hanya menjalankan `assembleRelease` (tanpa unit test), memakai cache Gradle, dan menerbitkan APK ke GitHub Releases.
 - Tambahkan secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, dan `ANDROID_KEY_PASSWORD` untuk tanda tangan rilis yang konsisten. Tanpa secrets, CI tetap menandatangani APK dengan kunci sementara agar artifact bisa dipasang untuk dicoba.
 
 ## Catatan MVP
