@@ -40,8 +40,8 @@ object ReceiptRenderer {
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
         }
         val bold = Paint(normal).apply { typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL) }
-        val large = Paint(bold).apply { textSize = 24f }
-        val totalPaint = Paint(bold).apply { textSize = 26f }
+        val large = Paint(bold).apply { this.textSize = 24f }
+        val totalPaint = Paint(bold).apply { this.textSize = 26f }
         val contentWidth = width - 2 * pad
         val rows = mutableListOf<Row>()
         fun center(text: String, isBold: Boolean = false, before: Int = 0, isLarge: Boolean = false) { rows += Row(centered = text, bold = isBold, large = isLarge, spaceBefore = before) }
