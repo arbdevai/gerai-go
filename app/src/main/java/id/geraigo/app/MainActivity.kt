@@ -80,11 +80,13 @@ class MainActivity : ComponentActivity() {
     var editing by remember { mutableStateOf<Sale?>(null) }; var formOpen by remember { mutableStateOf(false) }
     var receipt by remember { mutableStateOf<Sale?>(null) }; var deleteTarget by remember { mutableStateOf<Sale?>(null) }
     var pendingPrint by remember { mutableStateOf<Sale?>(null) }; var showPrinters by remember { mutableStateOf(false) }
-    var toast by remember { mutableStateOf("") }
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) showPrinters = true else toast = "Izin Bluetooth diperlukan untuk mencetak" }
+    var statusMessage by remember { mutableStateOf("") }
+    var statusError by remember { mutableStateOf(false) }
+    fun report(message: String, error: Boolean = false) { statusMessage = message; statusError = error }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) showPrinters = true else report("Izin Bluetooth ditolak. Aktifkan izin ini di Pengaturan Android untuk mencetak.", true) }
     val saveNoteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         val sale = receipt
-        if (uri != null && sale != null) runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(receiptText(sale, settings ?: StoreSettings()).toByteArray()) } }.onSuccess { toast = "Nota disimpan" }.onFailure { toast = "Gagal menyimpan nota" }
+        if (uri != null && sale != null) runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(receiptText(sale, settings ?: StoreSettings()).toByteArray()) } ?: error("Lokasi penyimpanan tidak dapat dibuka") }.onSuccess { report("Nota berhasil disimpan.") }.onFailure { report("Nota gagal disimpan. Periksa izin dan ruang penyimpanan, lalu coba lagi.", true) }
     }
     val filtered = remember(sales, query, selectedDate) { sales.filter { sale ->
         (sale.name.contains(query, true) || sale.note.contains(query, true)) && (selectedDate == null || sameDay(sale.createdAt, selectedDate!!))
@@ -94,14 +96,22 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 31 && ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) permissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
         else showPrinters = true
     }
-    Scaffold(containerColor = AppBackground, bottomBar = { FloatingNavDock(selected = tab, onSelected = { tab = it }) }, floatingActionButton = { if (tab == 0) FloatingActionButton(onClick = { editing = null; formOpen = true }, containerColor = Purple, contentColor = Color.White) { Icon(Icons.Default.Add, "Transaksi baru") } }) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
-          when (tab) {
-            0 -> CashPage(sales, favorites, onAdd = { editing = null; formOpen = true }, onFavorite = { name -> scope.launch { val prev = dao.latest(name); editing = Sale(name = name, price = dao.latestPrice(name) ?: 0, quantity = 1, favorite = true); formOpen = true } }, onReceipt = { receipt = it })
+    Scaffold(containerColor = AppBackground, bottomBar = { if (receipt == null && !formOpen) FloatingNavDock(selected = tab, onSelected = { tab = it }) }) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding)) {
+          if (statusMessage.isNotBlank()) StatusBanner(statusMessage, statusError) { statusMessage = "" }
+          Box(Modifier.weight(1f).fillMaxWidth()) {
+          when {
+            receipt != null -> {
+                val sale = receipt!!
+                ReceiptDialog(sale, settings ?: StoreSettings(), onClose = { receipt = null }, onPrint = { openPrinter(sale) }, onShare = { shareReceipt(context, sale, settings ?: StoreSettings()) }, onSave = { saveNoteLauncher.launch("nota-${sale.id}.txt") })
+            }
+            formOpen -> SaleForm(dao, editing, onClose = { formOpen = false }, onSaved = { receipt = it; formOpen = false })
+            else -> when (tab) {
+            0 -> CashPage(sales, favorites, onAdd = { editing = null; formOpen = true }, onFavorite = { name -> scope.launch { editing = Sale(name = name, price = dao.latestPrice(name) ?: 0, quantity = 1, favorite = true); formOpen = true } }, onReceipt = { receipt = it })
             1 -> HistoryPage(filtered, query, selectedDate, { query = it }, { selectedDate = it }, { receipt = it }, { sale -> editing = sale; formOpen = true }, { deleteTarget = it })
             2 -> DashboardPage(sales)
-            else -> SettingsPage(activity, sales, settings ?: StoreSettings(), onSave = { scope.launch { settingsDao.save(it); toast = "Pengaturan disimpan" } }, onBackup = { data, uri ->
-                runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(data.toByteArray()) } }.onSuccess { toast = "Backup berhasil disimpan" }.onFailure { toast = "Gagal menyimpan backup" }
+            else -> SettingsPage(activity, sales, settings ?: StoreSettings(), onSave = { scope.launch { runCatching { settingsDao.save(it) }.onSuccess { report("Pengaturan berhasil disimpan.") }.onFailure { report("Pengaturan gagal disimpan. Coba lagi.", true) } } }, onBackup = { data, uri ->
+                runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(data.toByteArray()) } ?: error("Lokasi penyimpanan tidak dapat dibuka") }.onSuccess { report("Backup berhasil disimpan.") }.onFailure { report("Backup gagal disimpan. Periksa ruang penyimpanan, lalu coba lagi.", true) }
             }, onRestore = { uri -> scope.launch {
                 runCatching {
                     val raw = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: error("File tidak dapat dibaca")
@@ -109,20 +119,29 @@ class MainActivity : ComponentActivity() {
                     for (i in 0 until incoming.length()) { val x = incoming.getJSONObject(i); restored.add(Sale(id = 0, name = x.getString("name"), price = x.getLong("price"), quantity = x.getInt("quantity"), note = x.optString("note"), createdAt = x.getLong("createdAt"), favorite = x.optBoolean("favorite"))) }
                     val pref = json.optJSONObject("settings")?.let { restoreImages(context, it) }
                     db.withTransaction { dao.clear(); dao.insertAll(restored); if (pref != null) settingsDao.save(pref) }
-                }.onSuccess { toast = "Backup berhasil dipulihkan" }.onFailure { toast = "File backup tidak valid: ${it.message ?: "gagal dibaca"}" }
+                }.onSuccess { report("Backup berhasil dipulihkan.") }.onFailure { report("Backup tidak dapat dipulihkan. Pastikan file Gerai Go tidak rusak dan coba lagi.", true) }
             } })
+            }
           }
         }
     }
-    if (formOpen) SaleForm(dao, editing, onClose = { formOpen = false }, onSaved = { receipt = it; formOpen = false })
-    receipt?.let { sale -> ReceiptDialog(sale, settings ?: StoreSettings(), onClose = { receipt = null }, onPrint = { openPrinter(sale) }, onShare = { shareReceipt(context, sale, settings ?: StoreSettings()) }, onSave = { saveNoteLauncher.launch("nota-${sale.id}.txt") }) }
     if (deleteTarget != null) AlertDialog(onDismissRequest = { deleteTarget = null }, title = { Text("Hapus transaksi?") }, text = { Text("${deleteTarget?.name} akan dihapus permanen dari riwayat.") }, confirmButton = { TextButton(onClick = { val item = deleteTarget!!; scope.launch { dao.delete(item.id) }; deleteTarget = null }) { Text("Hapus", color = Color(0xFFB42318)) } }, dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Batal") } })
     if (showPrinters) PrinterDialog(activity, onDismiss = { showPrinters = false }, onSelect = { address ->
         showPrinters = false; val sale = pendingPrint ?: return@PrinterDialog
-        scope.launch { runCatching { ThermalPrinter.print(context, address, sale, settings ?: StoreSettings()) }.onSuccess { toast = "Nota terkirim ke printer" }.onFailure { toast = "Cetak gagal: ${it.message ?: "periksa koneksi"}" } }
+        scope.launch { runCatching { ThermalPrinter.print(context, address, sale, settings ?: StoreSettings()) }.onSuccess { report("Nota berhasil dikirim ke printer.") }.onFailure { report("Nota gagal dicetak. Pastikan printer menyala, sudah dipasangkan, dan kertas tersedia.", true) } }
     })
-    if (toast.isNotBlank()) LaunchedEffect(toast) { kotlinx.coroutines.delay(2600); toast = "" }
-    if (toast.isNotBlank()) SnackbarHost(hostState = remember { SnackbarHostState() }, modifier = Modifier.padding(bottom = 78.dp)) { Snackbar { Text(toast) } }
+}
+
+@Composable private fun StatusBanner(message: String, isError: Boolean, onDismiss: () -> Unit) {
+    val foreground = if (isError) Color(0xFF9F2727) else Color(0xFF176B50)
+    val background = if (isError) Color(0xFFFFF0EF) else Color(0xFFEAF7F1)
+    Surface(color = background, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp)) {
+        Row(Modifier.padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(if (isError) Icons.Default.ErrorOutline else Icons.Default.CheckCircle, null, tint = foreground, modifier = Modifier.size(19.dp))
+            Text(message, Modifier.weight(1f).padding(horizontal = 10.dp), color = foreground, fontSize = 13.sp)
+            IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.Close, "Tutup pesan", tint = foreground, modifier = Modifier.size(18.dp)) }
+        }
+    }
 }
 
 @Composable private fun FloatingNavDock(selected: Int, onSelected: (Int) -> Unit) {
@@ -137,18 +156,16 @@ class MainActivity : ComponentActivity() {
         Row(Modifier.fillMaxWidth().height(68.dp).padding(horizontal = 8.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
             labels.forEachIndexed { index, label ->
                 val active = selected == index
-                val container by animateColorAsState(if (active) Purple else Color.Transparent, tween(220), label = "nav-container-$index")
-                val foreground by animateColorAsState(if (active) Color.White else Color(0xFF817D8A), tween(220), label = "nav-icon-$index")
-                Box(Modifier.weight(if (active) 1.7f else 1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
                     Surface(
                         onClick = { onSelected(index) },
-                        color = container,
-                        shape = RoundedCornerShape(22.dp),
-                            modifier = Modifier.fillMaxHeight().then(if (active) Modifier.fillMaxWidth() else Modifier.width(54.dp)).animateContentSize(tween(220))
+                        color = if (active) Color(0xFFF0EAFE) else Color.Transparent,
+                        shape = RoundedCornerShape(19.dp),
+                        modifier = Modifier.fillMaxHeight().fillMaxWidth(.96f).animateContentSize(tween(180))
                     ) {
-                        Row(Modifier.fillMaxSize().padding(horizontal = if (active) 11.dp else 0.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                            Icon(icons[index], contentDescription = label, tint = foreground, modifier = Modifier.size(21.dp))
-                            if (active) { Spacer(Modifier.width(7.dp)); Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1) }
+                        Column(Modifier.fillMaxSize().padding(vertical = 3.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(icons[index], contentDescription = label, tint = if (active) Purple else Color(0xFF817D8A), modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.height(2.dp)); Text(label, color = if (active) Purple else Color(0xFF817D8A), fontSize = 9.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1)
                         }
                     }
                 }
@@ -163,18 +180,18 @@ class MainActivity : ComponentActivity() {
 
 @Composable private fun CashPage(sales: List<Sale>, favorites: List<String>, onAdd: () -> Unit, onFavorite: (String) -> Unit, onReceipt: (Sale) -> Unit) {
     val today = sales.filter { sameDay(it.createdAt, System.currentTimeMillis()) }
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
         ScreenHeader("Kas hari ini", "Semua transaksi tersimpan di perangkat")
-        Surface(shape = RoundedCornerShape(28.dp), color = Color.Transparent, modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.background(Brush.linearGradient(listOf(Color(0xFF7650CC), Color(0xFF492D92)))).padding(21.dp)) {
+        Surface(shape = RoundedCornerShape(22.dp), color = Color.Transparent, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.background(Brush.linearGradient(listOf(Color(0xFF6941C6), Color(0xFF5635A5)))).padding(20.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("TOTAL PEMASUKAN", Modifier.weight(1f), color = Color.White.copy(alpha = .78f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.1.sp); Icon(Icons.Default.TrendingUp, null, tint = Color.White.copy(alpha = .85f)) }
                 Spacer(Modifier.height(8.dp)); Text(rupiah(today.sumOf { it.total }), color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold, letterSpacing = (-.5).sp)
                 Spacer(Modifier.height(15.dp)); Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) { Text("${today.size} transaksi", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold); Text(dateLabel(System.currentTimeMillis()), color = Color.White.copy(alpha = .72f), fontSize = 11.sp) }
-                    Surface(onClick = onAdd, color = Color.White.copy(alpha = .16f), shape = RoundedCornerShape(15.dp)) { Row(Modifier.padding(horizontal = 13.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Add, null, tint = Color.White, modifier = Modifier.size(17.dp)); Spacer(Modifier.width(5.dp)); Text("Catat", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) } }
                 }
             }
         }
+        Spacer(Modifier.height(14.dp)); Button(onClick = onAdd, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(15.dp)) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("Catat transaksi") }
         if (favorites.isNotEmpty()) {
             Spacer(Modifier.height(18.dp)); Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Star, null, tint = Purple, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Favorit", color = Ink, fontWeight = FontWeight.SemiBold) }
             Spacer(Modifier.height(8.dp)); LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(favorites) { name -> SuggestionChip(onClick = { onFavorite(name) }, label = { Text(name) }, icon = { Icon(Icons.Default.Bolt, null, Modifier.size(16.dp)) }) } }
@@ -188,7 +205,7 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun HistoryPage(sales: List<Sale>, query: String, selectedDate: Long?, onQuery: (String) -> Unit, onDate: (Long?) -> Unit, onReceipt: (Sale) -> Unit, onEdit: (Sale) -> Unit, onDelete: (Sale) -> Unit) {
     var dateDialog by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
         ScreenHeader("Riwayat", "Cari dan kelola transaksi")
         OutlinedTextField(query, onQuery, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Cari nama atau catatan") }, leadingIcon = { Icon(Icons.Default.Search, null) }, shape = RoundedCornerShape(16.dp), singleLine = true)
         Spacer(Modifier.height(8.dp)); Row(verticalAlignment = Alignment.CenterVertically) {
@@ -233,7 +250,7 @@ class MainActivity : ComponentActivity() {
     val daily = (6 downTo 0).map { delta -> val day = now - delta * 86400000L; sales.filter { sameDay(it.createdAt, day) }.sumOf { it.total } }
     val weeks = (3 downTo 0).map { offset -> val start = startOfDay(now) - (offset * 7L + 6L) * 86400000; sales.filter { it.createdAt >= start && it.createdAt < start + 7L * 86400000 }.sumOf { it.total } }
     val products = sales.groupBy { it.name }.mapValues { it.value.sumOf(Sale::total) }.entries.sortedByDescending { it.value }.take(6)
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 18.dp).verticalScroll(rememberScrollState())) {
         ScreenHeader("Dashboard", "Ringkasan keuangan usaha")
         Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) { MetricCard("Pendapatan hari ini", rupiah(today.sumOf { it.total }), Modifier.weight(1f)); MetricCard("Transaksi hari ini", "${today.size}", Modifier.weight(1f)) }
         Spacer(Modifier.height(9.dp)); Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) { MetricCard("Rata-rata transaksi", rupiah(if (today.isEmpty()) 0 else today.sumOf { it.total } / today.size), Modifier.weight(1f)); MetricCard("Minggu ini", rupiah(week.sumOf { it.total }), Modifier.weight(1f)) }
@@ -279,9 +296,10 @@ class MainActivity : ComponentActivity() {
 
 @Composable private fun SaleForm(dao: SaleDao, initial: Sale?, onClose: () -> Unit, onSaved: (Sale) -> Unit) {
     var name by remember(initial?.id) { mutableStateOf(initial?.name ?: "") }; var price by remember(initial?.id) { mutableStateOf(initial?.price?.toString() ?: "") }; var quantity by remember(initial?.id) { mutableStateOf(initial?.quantity?.toString() ?: "1") }; var note by remember(initial?.id) { mutableStateOf(initial?.note ?: "") }; var favorite by remember(initial?.id) { mutableStateOf(initial?.favorite ?: false) }
-    var suggestions by remember { mutableStateOf(emptyList<String>()) }; val scope = rememberCoroutineScope()
-    Dialog(onDismissRequest = onClose) { Surface(shape = RoundedCornerShape(24.dp), color = Color.White, modifier = Modifier.fillMaxWidth()) { Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) { Text(if (initial == null) "Transaksi baru" else "Edit transaksi", Modifier.weight(1f), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink); IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Tutup") } }
+    var suggestions by remember { mutableStateOf(emptyList<String>()) }; var formError by remember { mutableStateOf("") }; val scope = rememberCoroutineScope()
+    Column(Modifier.fillMaxSize().background(AppBackground).verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 14.dp)) { Surface(shape = RoundedCornerShape(22.dp), color = Color.White, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(20.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onClose) { Icon(Icons.Default.ArrowBack, "Kembali", tint = Ink) }; Text(if (initial == null) "Transaksi baru" else "Edit transaksi", Modifier.weight(1f), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink) }
+        if (formError.isNotBlank()) Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.ErrorOutline, null, tint = Color(0xFFB42318), modifier = Modifier.size(18.dp)); Text(formError, Modifier.padding(start = 8.dp), color = Color(0xFFB42318), fontSize = 12.sp) }
         OutlinedTextField(name, { name = it; scope.launch { suggestions = if (it.length > 1) dao.suggestions(it) else emptyList() } }, label = { Text("Nama barang/transaksi") }, placeholder = { Text("Ketik nama atau pilih saran") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), singleLine = true, trailingIcon = { IconButton(onClick = { favorite = !favorite }) { Icon(if (favorite) Icons.Default.Star else Icons.Default.StarBorder, "Favorit", tint = if (favorite) Color(0xFFE8A317) else Muted) } })
         suggestions.forEach { item -> TextButton(onClick = { name = item; suggestions = emptyList(); scope.launch { dao.latestPrice(item)?.let { price = it.toString() } } }) { Icon(Icons.Default.History, null, Modifier.size(16.dp)); Spacer(Modifier.width(5.dp)); Text(item) } }
         Spacer(Modifier.height(8.dp)); OutlinedTextField(price, { price = it.filter(Char::isDigit) }, label = { Text("Harga satuan (Rp)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), singleLine = true)
@@ -290,18 +308,27 @@ class MainActivity : ComponentActivity() {
         val total = (price.toLongOrNull() ?: 0) * (quantity.toIntOrNull() ?: 1)
         Spacer(Modifier.height(12.dp)); Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("Total", color = Muted); Spacer(Modifier.weight(1f)); Text(rupiah(total), fontWeight = FontWeight.Bold, color = Ink, fontSize = 19.sp) }
         Spacer(Modifier.height(14.dp)); Button(onClick = {
-            val sale = Sale(id = initial?.id ?: 0, name = name.trim(), price = price.toLongOrNull() ?: 0, quantity = quantity.toIntOrNull() ?: 1, note = note.trim(), createdAt = initial?.createdAt ?: System.currentTimeMillis(), favorite = favorite)
-            scope.launch { if (initial == null) onSaved(sale.copy(id = dao.insert(sale))) else { dao.update(sale); onSaved(sale) } }
-        }, enabled = name.isNotBlank() && (price.toLongOrNull() ?: 0) > 0 && (quantity.toIntOrNull() ?: 0) > 0, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(15.dp)) { Text(if (initial == null) "Simpan transaksi" else "Simpan perubahan") }
+            val parsedPrice = price.toLongOrNull()
+            val parsedQuantity = quantity.toIntOrNull()
+            formError = when {
+                name.isBlank() -> "Nama transaksi perlu diisi."
+                parsedPrice == null || parsedPrice <= 0 -> "Masukkan harga lebih dari Rp 0."
+                parsedQuantity == null || parsedQuantity <= 0 -> "Jumlah harus minimal 1."
+                else -> ""
+            }
+            if (formError.isBlank()) {
+                val sale = Sale(id = initial?.id ?: 0, name = name.trim(), price = parsedPrice!!, quantity = parsedQuantity!!, note = note.trim(), createdAt = initial?.createdAt ?: System.currentTimeMillis(), favorite = favorite)
+                scope.launch { runCatching { if (initial == null) dao.insert(sale) else { dao.update(sale); sale.id } }.onSuccess { id -> onSaved(sale.copy(id = id)) }.onFailure { formError = "Transaksi gagal disimpan. Coba lagi." } }
+            }
+        }, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(15.dp)) { Text(if (initial == null) "Simpan transaksi" else "Simpan perubahan") }
     } } }
 }
 
 @Composable private fun ReceiptDialog(sale: Sale, settings: StoreSettings, onClose: () -> Unit, onPrint: () -> Unit, onShare: () -> Unit, onSave: () -> Unit) {
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Column(Modifier.fillMaxWidth().fillMaxHeight(.96f).padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Column(Modifier.fillMaxSize().background(AppBackground).padding(horizontal = 16.dp, vertical = 10.dp)) {
             Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) { Text("Nota tersimpan", color = Ink, fontWeight = FontWeight.Bold, fontSize = 21.sp); Text("Pratinjau sesuai lebar kertas ${settings.paperWidth} mm", color = Muted, fontSize = 12.sp) }
-                IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Tutup pratinjau", tint = Ink) }
+                IconButton(onClick = onClose) { Icon(Icons.Default.ArrowBack, "Kembali", tint = Ink) }
             }
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), contentAlignment = Alignment.TopCenter) {
                 val paperShape = remember { ReceiptPaperShape() }
@@ -347,7 +374,6 @@ class MainActivity : ComponentActivity() {
             }
             Button(onClick = onPrint, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(50.dp), shape = RoundedCornerShape(17.dp)) { Icon(Icons.Default.Print, null); Spacer(Modifier.width(8.dp)); Text("Cetak nota") }
         }
-    }
 }
 
 @Composable private fun ReceiptDataLine(left: String, right: String, bold: Boolean = false, size: TextUnit = 10.sp) {
@@ -393,7 +419,7 @@ private class ReceiptPaperShape : Shape {
     val chooseExtra = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { runCatching { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) }; model = model.copy(extraImageUri = it.toString(), showExtraImage = true) } }
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) onBackup(backupJson(context, sales, model), uri) }
     val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) onRestore(uri) }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 18.dp).verticalScroll(rememberScrollState())) {
         ScreenHeader("Pengaturan", "Identitas toko, nota, dan data")
         Text("Informasi toko", fontWeight = FontWeight.SemiBold, color = Ink, fontSize = 16.sp)
         SettingInput("Nama toko", model.name) { model = model.copy(name = it) }
