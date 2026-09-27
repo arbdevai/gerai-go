@@ -530,12 +530,13 @@ private fun shareReceiptImage(context: Context, receipt: OrderReceipt, settings:
 private fun receiptText(receipt: OrderReceipt, settings: StoreSettings) = buildString {
     appendLine(settings.name.ifBlank { "Gerai Go" }); if (settings.address.isNotBlank()) appendLine(settings.address); if (settings.contact.isNotBlank()) appendLine(settings.contact)
     if (settings.header.isNotBlank()) appendLine(settings.header); appendLine("------------------------------"); appendLine("NOTA PENJUALAN"); appendLine("No. nota: GG-${receipt.key.takeLast(6).uppercase()}"); appendLine(dateTimeLabel(receipt.createdAt)); appendLine("------------------------------")
-    receipt.items.forEach { appendLine(it.name); appendLine("${it.quantity} x ${rupiah(it.price)} = ${rupiah(it.total)}") }
+    appendLine("RINCIAN BARANG")
+    receipt.items.forEachIndexed { index, item -> appendLine("${index + 1}. ${item.name}"); appendLine("${item.quantity} x ${rupiah(item.price)} = ${rupiah(item.total)}") }
     if (receipt.note.isNotBlank()) appendLine("Catatan: ${receipt.note}")
-    appendLine("------------------------------"); appendLine("Subtotal: ${rupiah(receipt.subtotal)}")
+    appendLine("------------------------------"); appendLine("RINGKASAN PEMBAYARAN"); appendLine("Jenis barang: ${receipt.items.size}"); appendLine("Total kuantitas: ${receipt.items.sumOf { it.quantity }}"); appendLine("Subtotal: ${rupiah(receipt.subtotal)}")
     if (receipt.taxPercent > 0.0 || receipt.taxAmount > 0) appendLine("Pajak ${receipt.taxPercent}%: ${rupiah(receipt.taxAmount)}")
     if (receipt.adminPercent > 0.0 || receipt.adminAmount > 0) appendLine("Biaya admin ${receipt.adminPercent}%: ${rupiah(receipt.adminAmount)}")
-    appendLine("TOTAL: ${rupiah(receipt.total)}"); appendLine("------------------------------"); if (settings.footer.isNotBlank()) appendLine(settings.footer)
+    appendLine("TOTAL BAYAR: ${rupiah(receipt.total)}"); appendLine("------------------------------"); if (settings.footer.isNotBlank()) appendLine(settings.footer)
 }
 
 private fun renderReceiptImage(context: Context, receipt: OrderReceipt, settings: StoreSettings): java.io.File {

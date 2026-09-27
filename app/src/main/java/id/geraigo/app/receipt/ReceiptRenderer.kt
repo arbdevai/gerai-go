@@ -23,6 +23,7 @@ object ReceiptRenderer {
         val right: String = "",
         val centered: String = "",
         val bold: Boolean = false,
+        val large: Boolean = false,
         val rule: Boolean = false,
         val spaceBefore: Int = 0,
         val image: Bitmap? = null,
@@ -36,12 +37,14 @@ object ReceiptRenderer {
         val normal = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.BLACK
             this.textSize = textSize
-            typeface = Typeface.create("monospace", Typeface.NORMAL)
+            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
         }
-        val bold = Paint(normal).apply { typeface = Typeface.create("monospace", Typeface.BOLD) }
+        val bold = Paint(normal).apply { typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL) }
+        val large = Paint(bold).apply { textSize = 24f }
+        val totalPaint = Paint(bold).apply { textSize = 26f }
         val contentWidth = width - 2 * pad
         val rows = mutableListOf<Row>()
-        fun center(text: String, isBold: Boolean = false, before: Int = 0) { rows += Row(centered = text, bold = isBold, spaceBefore = before) }
+        fun center(text: String, isBold: Boolean = false, before: Int = 0, isLarge: Boolean = false) { rows += Row(centered = text, bold = isBold, large = isLarge, spaceBefore = before) }
         fun left(text: String, isBold: Boolean = false) {
             val p = if (isBold) bold else normal
             wrap(text, p, contentWidth).forEach { rows += Row(left = it, bold = isBold) }
@@ -55,30 +58,36 @@ object ReceiptRenderer {
             pieces.forEachIndexed { index, part -> rows += Row(left = part, right = if (index == pieces.lastIndex) value else "", bold = isBold) }
         }
         if (settings.showLogo && settings.logoUri.isNotBlank()) loadImage(context, settings.logoUri, (width * settings.imageWidth / 384).coerceIn(96, width), 512)?.let { rows += Row(image = it, spaceBefore = 4) }
-        center(settings.name.ifBlank { "Gerai Go" }.uppercase(), true)
+        center(settings.name.ifBlank { "Gerai Go" }, true, isLarge = true)
         if (settings.address.isNotBlank()) wrap(settings.address, normal, contentWidth).forEach { center(it) }
         if (settings.contact.isNotBlank()) wrap(settings.contact, normal, contentWidth).forEach { center(it) }
         if (settings.header.isNotBlank()) wrap(settings.header, normal, contentWidth).forEach { center(it) }
         rows += Row(rule = true, spaceBefore = 5)
-        center("NOTA PENJUALAN", true)
+        center("NOTA PENJUALAN", true, before = 4)
         paired("No. nota", "GG-${receipt.key.takeLast(6).uppercase()}")
         paired("Waktu", SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("id", "ID")).format(Date(receipt.createdAt)))
         rows += Row(rule = true, spaceBefore = 5)
-        receipt.items.forEach { item ->
-            left(item.name.ifBlank { "Barang" }, true)
-            paired("${item.quantity} x ${money(item.price)}", money(item.total))
+        center("RINCIAN BARANG", true, before = 2)
+        receipt.items.forEachIndexed { index, item ->
+            left("${index + 1}. ${item.name.ifBlank { "Barang" }}", true)
+            paired("${item.quantity} × ${money(item.price)}", "= ${money(item.total)}")
         }
         if (receipt.note.isNotBlank()) left("Catatan: ${receipt.note}")
         rows += Row(rule = true, spaceBefore = 5)
+        center("RINGKASAN PEMBAYARAN", true, before = 2)
+        paired("Jenis barang", "${receipt.items.size}")
+        paired("Total kuantitas", receipt.items.sumOf { it.quantity }.toString())
         paired("Subtotal", money(receipt.subtotal))
         if (receipt.taxPercent > 0.0 || receipt.taxAmount > 0) paired("Pajak ${percent(receipt.taxPercent)}%", money(receipt.taxAmount))
         if (receipt.adminPercent > 0.0 || receipt.adminAmount > 0) paired("Biaya admin ${percent(receipt.adminPercent)}%", money(receipt.adminAmount))
-        paired("TOTAL", money(receipt.total), true)
+        rows += Row(rule = true, spaceBefore = 4)
+        paired("TOTAL BAYAR", money(receipt.total), true)
         rows += Row(rule = true, spaceBefore = 5)
         if (settings.showExtraImage && settings.extraImageUri.isNotBlank()) loadImage(context, settings.extraImageUri, (width * settings.imageWidth / 384).coerceIn(96, width), 320)?.let { rows += Row(image = it, spaceBefore = 5) }
         if (settings.footer.isNotBlank()) wrap(settings.footer, normal, contentWidth).forEach { center(it, before = if (it == settings.footer) 5 else 0) }
 
-        val height = (pad.toDouble() + rows.sumOf { (it.spaceBefore + (it.image?.height ?: lineHeight.toInt())).toDouble() } + pad).toInt().coerceAtLeast(180)
+        fun rowHeight(row: Row) = if (row.large || (row.bold && row.right.isNotBlank())) 34 else lineHeight.toInt()
+        val height = (pad.toDouble() + rows.sumOf { (it.spaceBefore + (it.image?.height ?: rowHeight(it))).toDouble() } + pad).toInt().coerceAtLeast(180)
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.drawColor(android.graphics.Color.WHITE)
@@ -86,16 +95,26 @@ object ReceiptRenderer {
         rows.forEach { row ->
             y += row.spaceBefore
             when {
-                row.rule -> { canvas.drawLine(pad, y + lineHeight / 2, width - pad, y + lineHeight / 2, normal); y += lineHeight }
+                row.rule -> {
+                    val dotPaint = Paint(normal).apply { color = 0xFF777777.toInt() }
+                    var x = pad
+                    while (x <= width - pad) { canvas.drawCircle(x, y + lineHeight / 2, 1.35f, dotPaint); x += 8f }
+                    y += rowHeight(row)
+                }
                 row.image != null -> { canvas.drawBitmap(row.image, (width - row.image.width) / 2f, y, null); y += row.image.height }
                 else -> {
-                    val paint = if (row.bold) bold else normal
+                    val paint = when {
+                        row.centered == "TOTAL BAYAR" || row.right == money(receipt.total) && row.bold -> totalPaint
+                        row.large -> large
+                        row.bold -> bold
+                        else -> normal
+                    }
                     if (row.centered.isNotEmpty()) canvas.drawText(row.centered, (width - paint.measureText(row.centered)) / 2f, y + textSize, paint)
                     else {
                         if (row.left.isNotEmpty()) canvas.drawText(row.left, pad, y + textSize, paint)
                         if (row.right.isNotEmpty()) canvas.drawText(row.right, width - pad - paint.measureText(row.right), y + textSize, paint)
                     }
-                    y += lineHeight
+                    y += rowHeight(row)
                 }
             }
         }
