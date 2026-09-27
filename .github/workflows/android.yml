@@ -3,8 +3,14 @@ name: Android CI
 on:
   push:
     branches: [ main, master ]
-  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   workflow_dispatch:
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
