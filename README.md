@@ -14,7 +14,7 @@ Workflow GitHub Actions membangun APK release setelah perubahan didorong ke bran
 - Cetak printer Bluetooth ESC/POS, dashboard pemasukan dan jumlah/rata-rata transaksi, grafik garis, batang mingguan, dan pie item.
 - Export/import backup JSON berisi transaksi, pengaturan, dan gambar nota.
 - GitHub Actions hanya menjalankan `assembleRelease` (tanpa unit test), memakai cache Gradle, lalu menerbitkan APK installable ke GitHub Releases.
-- Tambahkan secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, dan `ANDROID_KEY_PASSWORD` untuk tanda tangan rilis tetap. Tanpa secrets, CI membuat APK yang installable dengan kunci sementara.
+- Repo dikonfigurasi dengan signing secrets rilis tetap supaya setiap APK bisa menjadi pembaruan untuk instalasi sebelumnya.
 
 ## Catatan MVP
 
