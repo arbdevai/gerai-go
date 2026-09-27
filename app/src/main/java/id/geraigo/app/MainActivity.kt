@@ -125,6 +125,7 @@ class MainActivity : ComponentActivity() {
           }
         }
     }
+    }
     if (deleteTarget != null) AlertDialog(onDismissRequest = { deleteTarget = null }, title = { Text("Hapus transaksi?") }, text = { Text("${deleteTarget?.name} akan dihapus permanen dari riwayat.") }, confirmButton = { TextButton(onClick = { val item = deleteTarget!!; scope.launch { dao.delete(item.id) }; deleteTarget = null }) { Text("Hapus", color = Color(0xFFB42318)) } }, dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Batal") } })
     if (showPrinters) PrinterDialog(activity, onDismiss = { showPrinters = false }, onSelect = { address ->
         showPrinters = false; val sale = pendingPrint ?: return@PrinterDialog
