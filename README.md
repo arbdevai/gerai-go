@@ -6,15 +6,16 @@ Aplikasi kasir Android offline-first untuk usaha kecil. Dibangun dengan Kotlin, 
 
 Workflow GitHub Actions membangun APK release setelah perubahan didorong ke branch `main`/`master`, atau saat workflow dijalankan manual. Build dijalankan di GitHub Actions, bukan di perangkat lokal.
 
-## Fitur yang sudah tersedia
+## Fitur MVP
 
-- Pencatatan transaksi cepat dengan nama bebas, harga, jumlah, catatan, total otomatis, dan saran dari riwayat.
-- Data transaksi offline dengan Room, daftar/pencarian riwayat, hapus, dan preview nota.
-- Dashboard pendapatan hari ini, mingguan, bulanan, jumlah transaksi, grafik tren, dan ringkasan item.
-- Navigasi Kas, Riwayat, Dashboard, dan Pengaturan.
-- GitHub Actions hanya menjalankan `assembleRelease` (tanpa unit test), memakai cache Gradle, dan menerbitkan APK ke GitHub Releases.
-- Tambahkan secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, dan `ANDROID_KEY_PASSWORD` untuk tanda tangan rilis yang konsisten. Tanpa secrets, CI tetap menandatangani APK dengan kunci sementara agar artifact bisa dipasang untuk dicoba.
+- Pencatatan dan edit transaksi, favorit, autocomplete serta harga terakhir dari riwayat.
+- Database Room offline, pencarian, filter tanggal, hapus, nota tersimpan, preview, simpan teks nota, dan bagikan nota.
+- Pengaturan identitas nota, header/footer, gambar logo dan gambar tambahan, opsi tampil, ukuran gambar, dan lebar printer 58/80 mm.
+- Cetak printer Bluetooth ESC/POS, dashboard pemasukan dan jumlah/rata-rata transaksi, grafik garis, batang mingguan, dan pie item.
+- Export/import backup JSON berisi transaksi, pengaturan, dan gambar nota.
+- GitHub Actions hanya menjalankan `assembleRelease` (tanpa unit test), memakai cache Gradle, lalu menerbitkan APK installable ke GitHub Releases.
+- Tambahkan secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, dan `ANDROID_KEY_PASSWORD` untuk tanda tangan rilis tetap. Tanpa secrets, CI membuat APK yang installable dengan kunci sementara.
 
 ## Catatan MVP
 
-Pengaturan toko saat ini berupa rancangan UI lokal; penyimpanan persistennya, backup/import, pemilihan gambar logo, cetak dan bagikan nota, filter kalender, edit transaksi, serta grafik kategori penuh perlu dilanjutkan sebelum rilis produksi. Integrasi Bluetooth 58/80 mm juga belum diaktifkan.
+Cetak thermal memerlukan printer ESC/POS yang telah dipasangkan dari pengaturan Bluetooth Android. Untuk distribusi update lintas build, konfigurasi secrets keystore rilis tetap sebelum merilis ke pengguna.
