@@ -4,7 +4,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
-    <application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="Gerai Go" android:usesCleartextTraffic="false">
+    <application android:theme="@style/GeraiGoTheme" android:label="Gerai Go" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:usesCleartextTraffic="false">
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

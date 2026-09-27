@@ -19,6 +19,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -45,6 +54,7 @@ import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.room.withTransaction
+import androidx.core.view.WindowCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import android.content.ClipData
@@ -52,8 +62,9 @@ import coil.compose.AsyncImage
 import id.geraigo.app.data.*
 import id.geraigo.app.printer.ThermalPrinter
 import kotlinx.coroutines.launch
-import org.json.JSONArray
-import org.json.JSONObject
+import id.geraigo.app.backup.AutoBackup
+import id.geraigo.app.backup.BackupCodec
+import kotlinx.coroutines.Dispatchers
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
@@ -70,7 +81,14 @@ private fun rupiah(value: Long) = "Rp " + NumberFormat.getNumberInstance(Locale(
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.statusBarColor = android.graphics.Color.WHITE
+        window.navigationBarColor = android.graphics.Color.WHITE
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = true
+            isAppearanceLightNavigationBars = true
+        }
         val db = GeraiDatabase.get(this)
+        AutoBackup.ensurePeriodic(this)
         setContent { MaterialTheme(colorScheme = lightColorScheme(primary = Purple, background = AppBackground, surface = Color.White)) { GeraiApp(this, db) } }
     }
 }
@@ -87,8 +105,23 @@ class MainActivity : ComponentActivity() {
     var pendingPrint by remember { mutableStateOf<OrderReceipt?>(null) }; var showPrinters by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf("") }
     var statusError by remember { mutableStateOf(false) }
+    var statusEvent by remember { mutableIntStateOf(0) }
     BackHandler(enabled = receipt != null || formOpen) { if (receipt != null) receipt = null else formOpen = false }
-    fun report(message: String, error: Boolean = false) { statusMessage = message; statusError = error }
+    fun report(message: String, error: Boolean = false) { statusMessage = message; statusError = error; statusEvent++ }
+    LaunchedEffect(statusEvent) {
+        if (statusMessage.isNotBlank()) {
+            kotlinx.coroutines.delay(if (statusError) 5000 else 3200)
+            statusMessage = ""
+        }
+    }
+    LaunchedEffect(sales, settings) {
+        kotlinx.coroutines.withContext(Dispatchers.IO) {
+            runCatching {
+                AutoBackup.saveLocal(context, BackupCodec.encode(context, sales, settings ?: StoreSettings()).toByteArray(Charsets.UTF_8))
+            }
+        }
+        if (AutoBackup.driveUri(context) != null) AutoBackup.request(context)
+    }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants -> if (grants.values.all { it }) showPrinters = true else report("Izin Bluetooth ditolak. Aktifkan izin ini di Pengaturan Android untuk mencetak.", true) }
     val saveNoteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         val sale = receipt
@@ -105,9 +138,11 @@ class MainActivity : ComponentActivity() {
             scope.launch { runCatching { ThermalPrinter.print(context, (settings ?: StoreSettings()).printerAddress, sale, settings ?: StoreSettings()) }.onSuccess { report("Nota berhasil dicetak.") }.onFailure { report("Cetak gagal. Periksa koneksi printer atau pilih printer lain di Pengaturan.", true) } }
         } else showPrinters = true
     }
-    Scaffold(containerColor = AppBackground, bottomBar = { if (receipt == null && !formOpen) FloatingNavDock(selected = tab, onSelected = { tab = it }, onAdd = { editingOrder = null; quickItem = null; formOpen = true }) }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-          if (statusMessage.isNotBlank()) StatusBanner(statusMessage, statusError) { statusMessage = "" }
+    Scaffold(containerColor = Color.White, bottomBar = { if (receipt == null && !formOpen) FloatingNavDock(selected = tab, onSelected = { tab = it }, onAdd = { editingOrder = null; quickItem = null; formOpen = true }) }) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).background(AppBackground)) {
+          AnimatedVisibility(visible = statusMessage.isNotBlank(), enter = fadeIn(tween(170)) + expandVertically(tween(170)), exit = fadeOut(tween(160)) + shrinkVertically(tween(160))) {
+              StatusBanner(statusMessage, statusError) { statusMessage = "" }
+          }
           Box(Modifier.weight(1f).fillMaxWidth()) {
           when {
             receipt != null -> {
@@ -115,21 +150,23 @@ class MainActivity : ComponentActivity() {
                 ReceiptDialog(sale, settings ?: StoreSettings(), onClose = { receipt = null }, onPrint = { openPrinter(sale) }, onShareText = { shareReceiptText(context, sale, settings ?: StoreSettings()) }, onShareImage = { shareReceiptImage(context, sale, settings ?: StoreSettings()) }, onSave = { saveNoteLauncher.launch("nota-${sale.key}.txt") })
             }
             formOpen -> SaleForm(dao, editingOrder, quickItem, settings ?: StoreSettings(), onClose = { formOpen = false }, onSaved = { receipt = it; formOpen = false; quickItem = null })
-            else -> when (tab) {
+            else -> AnimatedContent(targetState = tab, transitionSpec = {
+                (fadeIn(tween(180)) + slideInHorizontally(tween(180)) { it / 32 }) togetherWith
+                    (fadeOut(tween(130)) + slideOutHorizontally(tween(130)) { -it / 32 })
+            }, label = "main-navigation") { page -> when (page) {
             0 -> CashPage(orders, favorites, onFavorite = { name -> scope.launch { quickItem = name to (dao.latestPrice(name) ?: 0); editingOrder = null; formOpen = true } }, onReceipt = { receipt = it })
             1 -> HistoryPage(filtered, query, selectedDate, { query = it }, { selectedDate = it }, { receipt = it }, { order -> editingOrder = order; quickItem = null; formOpen = true }, { deleteTarget = it }, { order -> scope.launch { val favorite = !order.items.all { it.favorite }; order.items.forEach { dao.update(it.copy(favorite = favorite)) } } })
             2 -> DashboardPage(orders)
-            else -> SettingsPage(activity, orders, settings ?: StoreSettings(), onChoosePrinter = { openPrinter(null) }, onSave = { scope.launch { runCatching { settingsDao.save(it) }.onSuccess { report("Pengaturan berhasil disimpan.") }.onFailure { report("Pengaturan gagal disimpan. Coba lagi.", true) } } }, onBackup = { data, uri ->
+            else -> SettingsPage(activity, orders, settings ?: StoreSettings(), onChoosePrinter = { openPrinter(null) }, onNotice = { report(it) }, onSave = { scope.launch { runCatching { settingsDao.save(it) }.onSuccess { report("Pengaturan berhasil disimpan.") }.onFailure { report("Pengaturan gagal disimpan. Coba lagi.", true) } } }, onBackup = { data, uri ->
                 runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(data.toByteArray()) } ?: error("Lokasi penyimpanan tidak dapat dibuka") }.onSuccess { report("Backup berhasil disimpan.") }.onFailure { report("Backup gagal disimpan. Periksa ruang penyimpanan, lalu coba lagi.", true) }
             }, onRestore = { uri -> scope.launch {
                 runCatching {
                     val raw = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: error("File tidak dapat dibaca")
-                    val json = JSONObject(raw); val incoming = json.getJSONArray("transactions"); val restored = ArrayList<Sale>()
-                    for (i in 0 until incoming.length()) { val x = incoming.getJSONObject(i); restored.add(Sale(id = 0, name = x.getString("name"), price = x.getLong("price"), quantity = x.getInt("quantity"), note = x.optString("note"), createdAt = x.getLong("createdAt"), favorite = x.optBoolean("favorite"), receiptKey = x.optString("receiptKey", UUID.randomUUID().toString()), taxAmount = x.optLong("taxAmount"), adminAmount = x.optLong("adminAmount"), taxPercent = x.optDouble("taxPercent"), adminPercent = x.optDouble("adminPercent"))) }
-                    val pref = json.optJSONObject("settings")?.let { restoreImages(context, it) }
+                    val (restored, pref) = BackupCodec.decode(context, raw)
                     db.withTransaction { dao.clear(); dao.insertAll(restored); if (pref != null) settingsDao.save(pref) }
                 }.onSuccess { report("Backup berhasil dipulihkan.") }.onFailure { report("Backup tidak dapat dipulihkan. Pastikan file Gerai Go tidak rusak dan coba lagi.", true) }
             } })
+            }
             }
           }
         }
@@ -348,9 +385,17 @@ private class RupiahInputTransformation : VisualTransformation {
     val receiptKey = remember(initial?.key, quickItem) { initial?.key ?: UUID.randomUUID().toString().replace("-", "") }
     var suggestions by remember { mutableStateOf(emptyList<String>()) }; var focusedItem by remember { mutableIntStateOf(-1) }; var formError by remember { mutableStateOf("") }; val scope = rememberCoroutineScope()
     fun changeItem(index: Int, value: DraftItem) { items = items.toMutableList().also { it[index] = value } }
+    val appliedSettings = remember(initial, settings) {
+        if (initial == null) settings else settings.copy(
+            taxEnabled = initial.taxPercent > 0.0 || initial.taxAmount > 0,
+            taxPercent = initial.taxPercent,
+            adminFeeEnabled = initial.adminPercent > 0.0 || initial.adminAmount > 0,
+            adminFeePercent = initial.adminPercent
+        )
+    }
     val subtotal = items.sumOf { (it.price.toLongOrNull() ?: 0L) * (it.quantity.toIntOrNull() ?: 0) }
-    val tax = if (settings.taxEnabled) (subtotal * settings.taxPercent / 100.0).roundToLong() else 0L
-    val admin = if (settings.adminFeeEnabled) (subtotal * settings.adminFeePercent / 100.0).roundToLong() else 0L
+    val tax = if (appliedSettings.taxEnabled) (subtotal * appliedSettings.taxPercent / 100.0).roundToLong() else 0L
+    val admin = if (appliedSettings.adminFeeEnabled) (subtotal * appliedSettings.adminFeePercent / 100.0).roundToLong() else 0L
     Column(Modifier.fillMaxSize().background(AppBackground).verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 14.dp)) {
         Column { Text(if (initial == null) "Transaksi baru" else "Edit transaksi", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = Ink); Text("Tambah beberapa barang dalam satu nota", color = Muted, fontSize = 12.sp) }
         items.forEachIndexed { index, item ->
@@ -371,12 +416,12 @@ private class RupiahInputTransformation : VisualTransformation {
         TextButton(onClick = { items = items + DraftItem() }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Tambah barang") }
         OutlinedTextField(note, { note = it }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp), label = { Text("Catatan nota (opsional)") }, shape = RoundedCornerShape(14.dp), maxLines = 2)
         Spacer(Modifier.height(18.dp))
-        LiveThermalPreview(items, note, settings, tax, admin, previewCreatedAt, receiptKey)
+        LiveThermalPreview(items, note, appliedSettings, tax, admin, previewCreatedAt, receiptKey)
         if (formError.isNotBlank()) Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.ErrorOutline, null, tint = Color(0xFFB42318), modifier = Modifier.size(18.dp)); Text(formError, Modifier.padding(start = 8.dp), color = Color(0xFFB42318), fontSize = 12.sp) }
         Spacer(Modifier.height(14.dp)); Surface(color = Color.White, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(15.dp)) {
             ReceiptDataLine("Subtotal", rupiah(subtotal), size = 12.sp)
-            if (settings.taxEnabled) ReceiptDataLine("Pajak ${settings.taxPercent}%", rupiah(tax), size = 12.sp)
-            if (settings.adminFeeEnabled) ReceiptDataLine("Biaya admin ${settings.adminFeePercent}%", rupiah(admin), size = 12.sp)
+            if (appliedSettings.taxEnabled) ReceiptDataLine("Pajak ${appliedSettings.taxPercent}%", rupiah(tax), size = 12.sp)
+            if (appliedSettings.adminFeeEnabled) ReceiptDataLine("Biaya admin ${appliedSettings.adminFeePercent}%", rupiah(admin), size = 12.sp)
             HorizontalDivider(Modifier.padding(vertical = 8.dp)); ReceiptDataLine("TOTAL", rupiah(subtotal + tax + admin), bold = true, size = 16.sp)
         } }
         Spacer(Modifier.height(12.dp)); Button(onClick = {
@@ -389,7 +434,7 @@ private class RupiahInputTransformation : VisualTransformation {
             }
             if (formError.isBlank()) {
                 val key = receiptKey; val createdAt = previewCreatedAt
-                val rows = items.mapIndexed { index, item -> Sale(name = item.name.trim(), price = item.price.toLong(), quantity = item.quantity.toInt(), note = if (index == 0) note.trim() else "", createdAt = createdAt, favorite = item.favorite, receiptKey = key, taxAmount = if (index == 0) tax else 0, adminAmount = if (index == 0) admin else 0, taxPercent = if (index == 0 && settings.taxEnabled) settings.taxPercent else 0.0, adminPercent = if (index == 0 && settings.adminFeeEnabled) settings.adminFeePercent else 0.0) }
+                val rows = items.mapIndexed { index, item -> Sale(name = item.name.trim(), price = item.price.toLong(), quantity = item.quantity.toInt(), note = if (index == 0) note.trim() else "", createdAt = createdAt, favorite = item.favorite, receiptKey = key, taxAmount = if (index == 0) tax else 0, adminAmount = if (index == 0) admin else 0, taxPercent = if (index == 0 && appliedSettings.taxEnabled) appliedSettings.taxPercent else 0.0, adminPercent = if (index == 0 && appliedSettings.adminFeeEnabled) appliedSettings.adminFeePercent else 0.0) }
                 scope.launch { runCatching { if (initial == null) dao.insertAll(rows) else dao.replaceReceipt(key, rows) }.onSuccess { onSaved(OrderReceipt(key, rows)) }.onFailure { formError = "Transaksi gagal disimpan. Data sebelumnya tetap aman; coba lagi." } }
             }
         }, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(15.dp)) { Text(if (initial == null) "Simpan dan lihat nota" else "Simpan perubahan") }
@@ -457,12 +502,19 @@ private class RupiahInputTransformation : VisualTransformation {
     } }, confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } })
 }
 
-@Composable private fun SettingsPage(activity: ComponentActivity, sales: List<OrderReceipt>, settings: StoreSettings, onChoosePrinter: () -> Unit, onSave: (StoreSettings) -> Unit, onBackup: (String, Uri) -> Unit, onRestore: (Uri) -> Unit) {
+@Composable private fun SettingsPage(activity: ComponentActivity, sales: List<OrderReceipt>, settings: StoreSettings, onChoosePrinter: () -> Unit, onNotice: (String) -> Unit, onSave: (StoreSettings) -> Unit, onBackup: (String, Uri) -> Unit, onRestore: (Uri) -> Unit) {
     val context = LocalContext.current
     var model by remember(settings) { mutableStateOf(settings) }
     val chooseLogo = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { runCatching { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) }; model = model.copy(logoUri = it.toString(), showLogo = true) } }
     val chooseExtra = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { runCatching { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) }; model = model.copy(extraImageUri = it.toString(), showExtraImage = true) } }
-    val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) onBackup(backupJson(context, sales.flatMap { it.items }, model), uri) }
+    val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) onBackup(BackupCodec.encode(context, sales.flatMap { it.items }, model), uri) }
+    val driveSetup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) runCatching {
+            context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            AutoBackup.setDriveUri(context, uri)
+        }.onSuccess { onNotice("File backup tersambung. Sinkronisasi otomatis dijadwalkan.") }
+            .onFailure { onNotice("Akses file backup tidak dapat disimpan. Pilih lokasi Drive kembali.") }
+    }
     val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) onRestore(uri) }
     Column(Modifier.fillMaxSize().padding(horizontal = 18.dp).verticalScroll(rememberScrollState())) {
         ScreenHeader("Pengaturan", "Identitas toko, nota, dan data")
@@ -480,16 +532,36 @@ private class RupiahInputTransformation : VisualTransformation {
         Text("Ukuran gambar cetak", color = Muted, fontSize = 12.sp); Slider(value = model.imageWidth.toFloat(), onValueChange = { model = model.copy(imageWidth = it.toInt()) }, valueRange = 96f..384f, steps = 5)
         Text("Lebar kertas printer", color = Muted, fontSize = 12.sp); Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) { FilterChip(model.paperWidth == 58, { model = model.copy(paperWidth = 58) }, label = { Text("58 mm") }); FilterChip(model.paperWidth == 80, { model = model.copy(paperWidth = 80) }, label = { Text("80 mm") }) }
         Spacer(Modifier.height(14.dp)); Text("Pajak dan biaya", fontWeight = FontWeight.SemiBold, color = Ink, fontSize = 16.sp)
-        SettingSwitch("Aktifkan pajak", model.taxEnabled) { model = model.copy(taxEnabled = it) }
+        SettingSwitch("Aktifkan pajak", model.taxEnabled) { model = model.copy(taxEnabled = it); onNotice(if (it) "Pajak aktif untuk transaksi baru setelah pengaturan disimpan." else "Pajak nonaktif untuk transaksi baru setelah pengaturan disimpan.") }
         if (model.taxEnabled) SettingPercent("Persentase pajak", model.taxPercent) { model = model.copy(taxPercent = it) }
-        SettingSwitch("Aktifkan biaya admin", model.adminFeeEnabled) { model = model.copy(adminFeeEnabled = it) }
+        SettingSwitch("Aktifkan biaya admin", model.adminFeeEnabled) { model = model.copy(adminFeeEnabled = it); onNotice(if (it) "Biaya admin aktif untuk transaksi baru setelah pengaturan disimpan." else "Biaya admin nonaktif untuk transaksi baru setelah pengaturan disimpan.") }
         if (model.adminFeeEnabled) SettingPercent("Persentase biaya admin", model.adminFeePercent) { model = model.copy(adminFeePercent = it) }
+        Text("Perubahan pajak dan biaya berlaku untuk transaksi baru. Nota lama tetap memakai nilai saat transaksi dibuat.", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 5.dp))
         Spacer(Modifier.height(14.dp)); Text("Printer Bluetooth", fontWeight = FontWeight.SemiBold, color = Ink, fontSize = 16.sp)
         val pairedName = remember(model.printerAddress) { runCatching { ThermalPrinter.pairedDevices(context).firstOrNull { it.address == model.printerAddress }?.name }.getOrNull() }
         Text(if (model.printerAddress.isBlank()) "Belum ada printer dipilih" else pairedName ?: model.printerAddress, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
         OutlinedButton(onClick = onChoosePrinter, modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) { Icon(Icons.Default.BluetoothSearching, null); Spacer(Modifier.width(7.dp)); Text("Pilih printer tersanding") }
         Button(onClick = { onSave(model) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), shape = RoundedCornerShape(13.dp)) { Icon(Icons.Default.Save, null); Spacer(Modifier.width(7.dp)); Text("Simpan pengaturan nota") }
-        Spacer(Modifier.height(20.dp)); Text("Backup lokal", fontWeight = FontWeight.SemiBold, color = Ink, fontSize = 16.sp); Text("${sales.size} transaksi tersimpan di perangkat", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 3.dp))
+        Spacer(Modifier.height(20.dp)); Text("Backup", fontWeight = FontWeight.SemiBold, color = Ink, fontSize = 16.sp)
+        Text("${sales.size} transaksi · salinan otomatis di Documents/Gerai Go dan penyimpanan aplikasi.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 3.dp))
+        Text("Google Drive", color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 12.dp))
+        val driveStatus = AutoBackup.driveStatus(context)
+        val driveMessage = when {
+            AutoBackup.driveUri(context) == null -> "Belum tersambung. Pilih folder di Google Drive untuk mengaktifkan sinkronisasi."
+            driveStatus == "ok" -> "Tersambung · terakhir disinkronkan ${dateTimeLabel(AutoBackup.lastSync(context))}"
+            driveStatus.isNotBlank() -> "Sinkronisasi perlu perhatian: $driveStatus"
+            else -> "Tersambung · sinkronisasi berjalan otomatis saat internet tersedia."
+        }
+        Text(driveMessage, color = if (driveStatus.isNotBlank() && driveStatus != "ok") Color(0xFF9F2727) else Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 3.dp))
+        OutlinedButton(onClick = { driveSetup.launch("gerai-go-backup.json") }, modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) { Icon(Icons.Default.CloudUpload, null); Spacer(Modifier.width(7.dp)); Text(if (AutoBackup.driveUri(context) == null) "Pilih file backup di Drive" else "Ubah file backup Drive") }
+        if (AutoBackup.driveUri(context) != null) TextButton(onClick = {
+            runCatching {
+                val uri = AutoBackup.driveUri(context)
+                if (uri != null) context.contentResolver.releasePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                AutoBackup.setDriveUri(context, null)
+            }.onSuccess { onNotice("Sinkronisasi Google Drive dinonaktifkan.") }
+                .onFailure { onNotice("Akses Drive tidak dapat dilepas. Coba lagi.") }
+        }, modifier = Modifier.align(Alignment.End)) { Text("Nonaktifkan Drive") }
         Row(Modifier.fillMaxWidth().padding(top = 9.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedButton(onClick = { export.launch("gerai-go-backup.json") }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.FileDownload, null); Spacer(Modifier.width(4.dp)); Text("Export") }; OutlinedButton(onClick = { import.launch(arrayOf("application/json", "text/*")) }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.FileUpload, null); Spacer(Modifier.width(4.dp)); Text("Import") } }
         Spacer(Modifier.height(22.dp))
     }
@@ -547,22 +619,6 @@ private fun renderReceiptImage(context: Context, receipt: OrderReceipt, settings
     file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
     bitmap.recycle()
     return file
-}
-
-private fun backupJson(context: Context, sales: List<Sale>, settings: StoreSettings): String {
-    val list = JSONArray(); sales.forEach { list.put(JSONObject().put("name", it.name).put("price", it.price).put("quantity", it.quantity).put("note", it.note).put("createdAt", it.createdAt).put("favorite", it.favorite).put("receiptKey", it.receiptKey).put("taxAmount", it.taxAmount).put("adminAmount", it.adminAmount).put("taxPercent", it.taxPercent).put("adminPercent", it.adminPercent)) }
-    fun image(uri: String): String = if (uri.isBlank()) "" else runCatching { context.contentResolver.openInputStream(Uri.parse(uri))?.use { android.util.Base64.encodeToString(it.readBytes(), android.util.Base64.NO_WRAP) } }.getOrNull().orEmpty()
-    return JSONObject().put("format", "gerai-go-backup").put("version", 2).put("transactions", list).put("settings", JSONObject().put("name", settings.name).put("address", settings.address).put("contact", settings.contact).put("header", settings.header).put("footer", settings.footer).put("logoUri", settings.logoUri).put("extraImageUri", settings.extraImageUri).put("logoImage", image(settings.logoUri)).put("extraImage", image(settings.extraImageUri)).put("showLogo", settings.showLogo).put("showExtraImage", settings.showExtraImage).put("imageWidth", settings.imageWidth).put("paperWidth", settings.paperWidth).put("taxEnabled", settings.taxEnabled).put("taxPercent", settings.taxPercent).put("adminFeeEnabled", settings.adminFeeEnabled).put("adminFeePercent", settings.adminFeePercent).put("printerAddress", settings.printerAddress)).toString(2)
-}
-private fun restoreImages(context: Context, j: JSONObject): StoreSettings {
-    fun restore(key: String, filename: String, legacyUri: String): String {
-        val encoded = j.optString(key)
-        if (encoded.isBlank()) return legacyUri
-        val file = java.io.File(context.filesDir, filename)
-        file.writeBytes(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT))
-        return Uri.fromFile(file).toString()
-    }
-    return StoreSettings(name = j.optString("name", "Gerai Go"), address = j.optString("address"), contact = j.optString("contact"), header = j.optString("header"), footer = j.optString("footer", "Terima kasih telah berbelanja"), logoUri = restore("logoImage", "backup-logo", j.optString("logoUri")), extraImageUri = restore("extraImage", "backup-extra-image", j.optString("extraImageUri")), showLogo = j.optBoolean("showLogo", true), showExtraImage = j.optBoolean("showExtraImage"), imageWidth = j.optInt("imageWidth", 160), paperWidth = j.optInt("paperWidth", 58), taxEnabled = j.optBoolean("taxEnabled"), taxPercent = j.optDouble("taxPercent"), adminFeeEnabled = j.optBoolean("adminFeeEnabled"), adminFeePercent = j.optDouble("adminFeePercent"), printerAddress = j.optString("printerAddress"))
 }
 
 private fun startOfDay(time: Long): Long = Calendar.getInstance().apply { timeInMillis = time; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis
