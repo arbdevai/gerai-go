@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -23,12 +26,23 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.room.withTransaction
 import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
@@ -80,15 +94,9 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 31 && ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) permissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
         else showPrinters = true
     }
-    Scaffold(containerColor = AppBackground, bottomBar = {
-        NavigationBar(containerColor = Color.White, tonalElevation = 0.dp) {
-            listOf("Kas", "Riwayat", "Dashboard", "Pengaturan").forEachIndexed { i, label ->
-                val icons = listOf(Icons.Default.AddCard, Icons.Default.ReceiptLong, Icons.Default.BarChart, Icons.Default.Settings)
-                NavigationBarItem(selected = tab == i, onClick = { tab = i }, icon = { Icon(icons[i], null) }, label = { Text(label, fontSize = 11.sp) }, colors = NavigationBarItemDefaults.colors(selectedIconColor = Purple, selectedTextColor = Purple, indicatorColor = Color(0xFFF0EAFE)))
-            }
-        }
-    }, floatingActionButton = { if (tab == 0) FloatingActionButton(onClick = { editing = null; formOpen = true }, containerColor = Purple, contentColor = Color.White) { Icon(Icons.Default.Add, "Transaksi baru") } }) { padding ->
-        when (tab) {
+    Scaffold(containerColor = AppBackground, bottomBar = { FloatingNavDock(selected = tab, onSelected = { tab = it }) }, floatingActionButton = { if (tab == 0) FloatingActionButton(onClick = { editing = null; formOpen = true }, containerColor = Purple, contentColor = Color.White) { Icon(Icons.Default.Add, "Transaksi baru") } }) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding)) {
+          when (tab) {
             0 -> CashPage(sales, favorites, onAdd = { editing = null; formOpen = true }, onFavorite = { name -> scope.launch { val prev = dao.latest(name); editing = Sale(name = name, price = dao.latestPrice(name) ?: 0, quantity = 1, favorite = true); formOpen = true } }, onReceipt = { receipt = it })
             1 -> HistoryPage(filtered, query, selectedDate, { query = it }, { selectedDate = it }, { receipt = it }, { sale -> editing = sale; formOpen = true }, { deleteTarget = it })
             2 -> DashboardPage(sales)
@@ -103,6 +111,7 @@ class MainActivity : ComponentActivity() {
                     db.withTransaction { dao.clear(); dao.insertAll(restored); if (pref != null) settingsDao.save(pref) }
                 }.onSuccess { toast = "Backup berhasil dipulihkan" }.onFailure { toast = "File backup tidak valid: ${it.message ?: "gagal dibaca"}" }
             } })
+          }
         }
     }
     if (formOpen) SaleForm(dao, editing, onClose = { formOpen = false }, onSaved = { receipt = it; formOpen = false })
@@ -116,6 +125,38 @@ class MainActivity : ComponentActivity() {
     if (toast.isNotBlank()) SnackbarHost(hostState = remember { SnackbarHostState() }, modifier = Modifier.padding(bottom = 78.dp)) { Snackbar { Text(toast) } }
 }
 
+@Composable private fun FloatingNavDock(selected: Int, onSelected: (Int) -> Unit) {
+    val labels = listOf("Kas", "Riwayat", "Dashboard", "Pengaturan")
+    val icons = listOf(Icons.Default.AddCard, Icons.Default.ReceiptLong, Icons.Default.Insights, Icons.Default.Storefront)
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, bottom = 9.dp).shadow(16.dp, RoundedCornerShape(30.dp)),
+        color = Color.White,
+        shape = RoundedCornerShape(30.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEDEAF3))
+    ) {
+        Row(Modifier.fillMaxWidth().height(68.dp).padding(horizontal = 8.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+            labels.forEachIndexed { index, label ->
+                val active = selected == index
+                val container by animateColorAsState(if (active) Purple else Color.Transparent, tween(220), label = "nav-container-$index")
+                val foreground by animateColorAsState(if (active) Color.White else Color(0xFF817D8A), tween(220), label = "nav-icon-$index")
+                Box(Modifier.weight(if (active) 1.7f else 1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                    Surface(
+                        onClick = { onSelected(index) },
+                        color = container,
+                        shape = RoundedCornerShape(22.dp),
+                            modifier = Modifier.fillMaxHeight().then(if (active) Modifier.fillMaxWidth() else Modifier.width(54.dp)).animateContentSize(tween(220))
+                    ) {
+                        Row(Modifier.fillMaxSize().padding(horizontal = if (active) 11.dp else 0.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                            Icon(icons[index], contentDescription = label, tint = foreground, modifier = Modifier.size(21.dp))
+                            if (active) { Spacer(Modifier.width(7.dp)); Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable private fun ScreenHeader(title: String, subtitle: String) {
     Spacer(Modifier.height(20.dp)); Text(title, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Ink); Spacer(Modifier.height(4.dp)); Text(subtitle, color = Muted, fontSize = 14.sp); Spacer(Modifier.height(18.dp))
 }
@@ -123,11 +164,17 @@ class MainActivity : ComponentActivity() {
 @Composable private fun CashPage(sales: List<Sale>, favorites: List<String>, onAdd: () -> Unit, onFavorite: (String) -> Unit, onReceipt: (Sale) -> Unit) {
     val today = sales.filter { sameDay(it.createdAt, System.currentTimeMillis()) }
     Column(Modifier.fillMaxSize()) {
-        ScreenHeader("Catat transaksi", "Catat penjualan dengan cepat")
-        Surface(shape = RoundedCornerShape(24.dp), color = Purple, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(20.dp)) {
-            Text("Pemasukan hari ini", color = Color.White.copy(alpha = .78f), fontSize = 13.sp); Text(rupiah(today.sumOf { it.total }), color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(7.dp)); Text("${today.size} transaksi  ·  Hari ini", color = Color.White.copy(alpha = .85f), fontSize = 13.sp)
-        } }
+        ScreenHeader("Kas hari ini", "Semua transaksi tersimpan di perangkat")
+        Surface(shape = RoundedCornerShape(28.dp), color = Color.Transparent, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.background(Brush.linearGradient(listOf(Color(0xFF7650CC), Color(0xFF492D92)))).padding(21.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("TOTAL PEMASUKAN", Modifier.weight(1f), color = Color.White.copy(alpha = .78f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.1.sp); Icon(Icons.Default.TrendingUp, null, tint = Color.White.copy(alpha = .85f)) }
+                Spacer(Modifier.height(8.dp)); Text(rupiah(today.sumOf { it.total }), color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold, letterSpacing = (-.5).sp)
+                Spacer(Modifier.height(15.dp)); Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) { Text("${today.size} transaksi", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold); Text(dateLabel(System.currentTimeMillis()), color = Color.White.copy(alpha = .72f), fontSize = 11.sp) }
+                    Surface(onClick = onAdd, color = Color.White.copy(alpha = .16f), shape = RoundedCornerShape(15.dp)) { Row(Modifier.padding(horizontal = 13.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Add, null, tint = Color.White, modifier = Modifier.size(17.dp)); Spacer(Modifier.width(5.dp)); Text("Catat", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) } }
+                }
+            }
+        }
         if (favorites.isNotEmpty()) {
             Spacer(Modifier.height(18.dp)); Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Star, null, tint = Purple, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Favorit", color = Ink, fontWeight = FontWeight.SemiBold) }
             Spacer(Modifier.height(8.dp)); LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(favorites) { name -> SuggestionChip(onClick = { onFavorite(name) }, label = { Text(name) }, icon = { Icon(Icons.Default.Bolt, null, Modifier.size(16.dp)) }) } }
@@ -149,14 +196,22 @@ class MainActivity : ComponentActivity() {
             Spacer(Modifier.width(7.dp)); FilterChip(selectedDate != null, { dateDialog = true }, label = { Text(selectedDate?.let { dateLabel(it) } ?: "Pilih tanggal") }, leadingIcon = { Icon(Icons.Default.CalendarMonth, null, Modifier.size(16.dp)) })
             Spacer(Modifier.weight(1f)); Text("${sales.size}", color = Muted, fontSize = 12.sp)
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)) { items(sales, key = { it.id }) { sale ->
-            Surface(color = Color.White, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(horizontal = 8.dp, vertical = 5.dp)) {
-                SaleRow(sale, { onReceipt(sale) }, modifier = Modifier.fillMaxWidth())
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = { onEdit(sale) }) { Icon(Icons.Default.Edit, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Edit") }
-                    TextButton(onClick = { onDelete(sale) }) { Icon(Icons.Default.DeleteOutline, null, Modifier.size(16.dp), tint = Color(0xFFB42318)); Spacer(Modifier.width(4.dp)); Text("Hapus", color = Color(0xFFB42318)) }
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)) { items(sales, key = { it.id }) { sale ->
+            var menuOpen by remember(sale.id) { mutableStateOf(false) }
+            Surface(color = Color.White, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth(), tonalElevation = 1.dp) {
+                Row(Modifier.padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    SaleRow(sale, { onReceipt(sale) }, modifier = Modifier.weight(1f))
+                    Box {
+                        IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, "Aksi transaksi", tint = Muted) }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(text = { Text("Lihat nota") }, leadingIcon = { Icon(Icons.Default.ReceiptLong, null) }, onClick = { menuOpen = false; onReceipt(sale) })
+                            DropdownMenuItem(text = { Text("Edit transaksi") }, leadingIcon = { Icon(Icons.Default.Edit, null) }, onClick = { menuOpen = false; onEdit(sale) })
+                            DropdownMenuItem(text = { Text(if (sale.favorite) "Hapus dari favorit" else "Jadikan favorit") }, leadingIcon = { Icon(if (sale.favorite) Icons.Default.Star else Icons.Default.StarBorder, null) }, onClick = { menuOpen = false; onEdit(sale.copy(favorite = !sale.favorite)) })
+                            DropdownMenuItem(text = { Text("Hapus transaksi", color = Color(0xFFB42318)) }, leadingIcon = { Icon(Icons.Default.DeleteOutline, null, tint = Color(0xFFB42318)) }, onClick = { menuOpen = false; onDelete(sale) })
+                        }
+                    }
                 }
-            } }
+            }
         } }
     }
     if (dateDialog) {
@@ -242,25 +297,81 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable private fun ReceiptDialog(sale: Sale, settings: StoreSettings, onClose: () -> Unit, onPrint: () -> Unit, onShare: () -> Unit, onSave: () -> Unit) {
-    Dialog(onDismissRequest = onClose) { Surface(color = Color.White, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) { Column(Modifier.verticalScroll(rememberScrollState()).padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        if (settings.showLogo && settings.logoUri.isNotBlank()) AsyncImage(settings.logoUri, contentDescription = "Logo toko", modifier = Modifier.size((settings.imageWidth / 4).coerceIn(48, 96).dp).clip(RoundedCornerShape(10.dp)))
-        Text(settings.name.ifBlank { "Gerai Go" }, fontWeight = FontWeight.Bold, fontSize = 19.sp, color = Ink)
-        if (settings.address.isNotBlank()) Text(settings.address, fontSize = 12.sp, color = Muted, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        if (settings.contact.isNotBlank()) Text(settings.contact, fontSize = 12.sp, color = Muted)
-        if (settings.header.isNotBlank()) Text(settings.header, Modifier.padding(top = 4.dp), fontSize = 12.sp, color = Ink)
-        HorizontalDivider(Modifier.padding(vertical = 14.dp), color = Color(0xFFECE9F0)); Row(Modifier.fillMaxWidth()) { Text(sale.name, Modifier.weight(1f), color = Ink, fontWeight = FontWeight.SemiBold); Text("${sale.quantity} × ${rupiah(sale.price)}", color = Muted, fontSize = 12.sp) }
-        if (sale.note.isNotBlank()) Text(sale.note, Modifier.fillMaxWidth().padding(top = 7.dp), color = Muted, fontSize = 12.sp)
-        Text(dateTimeLabel(sale.createdAt), Modifier.fillMaxWidth().padding(top = 7.dp), color = Muted, fontSize = 11.sp)
-        HorizontalDivider(Modifier.padding(vertical = 14.dp), color = Color(0xFFECE9F0)); Row(Modifier.fillMaxWidth()) { Text("TOTAL", Modifier.weight(1f), fontWeight = FontWeight.SemiBold); Text(rupiah(sale.total), fontWeight = FontWeight.Bold, color = Purple, fontSize = 18.sp) }
-        if (settings.showExtraImage && settings.extraImageUri.isNotBlank()) AsyncImage(settings.extraImageUri, contentDescription = "Gambar tambahan nota", modifier = Modifier.padding(top = 12.dp).width((settings.imageWidth / 2).coerceIn(90, 240).dp).heightIn(max = 130.dp))
-        if (settings.footer.isNotBlank()) Text(settings.footer, Modifier.padding(top = 13.dp), color = Muted, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        Spacer(Modifier.height(14.dp)); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedButton(onClick = onSave, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) { Icon(Icons.Default.SaveAlt, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Simpan") }
-            OutlinedButton(onClick = onShare, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) { Icon(Icons.Default.Share, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Bagikan") }
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(Modifier.fillMaxWidth().fillMaxHeight(.96f).padding(horizontal = 16.dp, vertical = 10.dp)) {
+            Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) { Text("Nota tersimpan", color = Ink, fontWeight = FontWeight.Bold, fontSize = 21.sp); Text("Pratinjau sesuai lebar kertas ${settings.paperWidth} mm", color = Muted, fontSize = 12.sp) }
+                IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Tutup pratinjau", tint = Ink) }
+            }
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), contentAlignment = Alignment.TopCenter) {
+                val paperShape = remember { ReceiptPaperShape() }
+                val desiredWidth = if (settings.paperWidth == 80) 340.dp else 246.dp
+                Column(
+                    Modifier.width(minOf(maxWidth, desiredWidth)).shadow(12.dp, paperShape).clip(paperShape).background(Color.White).padding(horizontal = 20.dp, vertical = 19.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (settings.showLogo && settings.logoUri.isNotBlank()) {
+                        AsyncImage(settings.logoUri, contentDescription = "Logo ${settings.name}", modifier = Modifier.size((settings.imageWidth / 3).coerceIn(42, 90).dp).clip(RoundedCornerShape(5.dp)))
+                        Spacer(Modifier.height(8.dp))
+                    } else {
+                        Box(Modifier.size(34.dp).clip(RoundedCornerShape(11.dp)).background(Color(0xFFF0EAFE)), contentAlignment = Alignment.Center) { Text((settings.name.ifBlank { "G" }).take(1).uppercase(), color = Purple, fontWeight = FontWeight.Bold) }
+                        Spacer(Modifier.height(7.dp))
+                    }
+                    Text(settings.name.ifBlank { "Gerai Go" }.uppercase(), color = Color(0xFF17151B), fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp, textAlign = TextAlign.Center, fontFamily = FontFamily.Monospace)
+                    if (settings.address.isNotBlank()) Text(settings.address, Modifier.padding(top = 4.dp), color = Color(0xFF39363D), fontSize = 10.sp, textAlign = TextAlign.Center, fontFamily = FontFamily.Monospace)
+                    if (settings.contact.isNotBlank()) Text(settings.contact, Modifier.padding(top = 2.dp), color = Color(0xFF39363D), fontSize = 10.sp, textAlign = TextAlign.Center, fontFamily = FontFamily.Monospace)
+                    if (settings.header.isNotBlank()) Text(settings.header, Modifier.padding(top = 7.dp), color = Color(0xFF39363D), fontSize = 10.sp, textAlign = TextAlign.Center, fontFamily = FontFamily.Monospace)
+                    Spacer(Modifier.height(12.dp)); ReceiptDottedRule(); Spacer(Modifier.height(9.dp))
+                    Text("NOTA PENJUALAN", color = Color(0xFF252229), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, fontFamily = FontFamily.Monospace)
+                    Spacer(Modifier.height(6.dp)); ReceiptDataLine("No. nota", "GG-${sale.id.toString().padStart(6, '0')}")
+                    ReceiptDataLine("Waktu", SimpleDateFormat("dd/MM/yyyy  HH:mm", Locale("id", "ID")).format(Date(sale.createdAt)))
+                    Spacer(Modifier.height(8.dp)); ReceiptDottedRule(); Spacer(Modifier.height(9.dp))
+                    Text(sale.name, Modifier.fillMaxWidth(), color = Color(0xFF17151B), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace)
+                    Spacer(Modifier.height(3.dp)); ReceiptDataLine("${sale.quantity} x ${rupiah(sale.price)}", rupiah(sale.total))
+                    if (sale.note.isNotBlank()) Text("Catatan: ${sale.note}", Modifier.fillMaxWidth().padding(top = 7.dp), color = Color(0xFF4A464E), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                    Spacer(Modifier.height(10.dp)); ReceiptDottedRule(); Spacer(Modifier.height(8.dp))
+                    ReceiptDataLine("Subtotal", rupiah(sale.total)); ReceiptDataLine("Diskon", rupiah(0))
+                    Spacer(Modifier.height(6.dp)); ReceiptDataLine("TOTAL", rupiah(sale.total), bold = true, size = 14.sp)
+                    Spacer(Modifier.height(9.dp)); ReceiptDottedRule()
+                    if (settings.showExtraImage && settings.extraImageUri.isNotBlank()) {
+                        Spacer(Modifier.height(11.dp)); AsyncImage(settings.extraImageUri, contentDescription = "Gambar tambahan nota", modifier = Modifier.width((settings.imageWidth / 2).coerceIn(90, 240).dp).heightIn(max = 120.dp))
+                    }
+                    if (settings.footer.isNotBlank()) Text(settings.footer, Modifier.fillMaxWidth().padding(top = 12.dp), color = Color(0xFF39363D), fontSize = 10.sp, textAlign = TextAlign.Center, fontFamily = FontFamily.Monospace)
+                    Text("Simpan nota ini sebagai bukti transaksi", Modifier.padding(top = 5.dp), color = Muted, fontSize = 9.sp, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(12.dp))
+                }
+            }
+            Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                OutlinedButton(onClick = onSave, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(16.dp)) { Icon(Icons.Default.SaveAlt, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Simpan") }
+                OutlinedButton(onClick = onShare, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(16.dp)) { Icon(Icons.Default.Share, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Bagikan") }
+            }
+            Button(onClick = onPrint, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(50.dp), shape = RoundedCornerShape(17.dp)) { Icon(Icons.Default.Print, null); Spacer(Modifier.width(8.dp)); Text("Cetak nota") }
         }
-        Button(onClick = onPrint, modifier = Modifier.fillMaxWidth().padding(top = 6.dp), shape = RoundedCornerShape(12.dp)) { Icon(Icons.Default.Print, null); Spacer(Modifier.width(7.dp)); Text("Cetak thermal") }
-        TextButton(onClick = onClose) { Text("Tutup") }
-    } } }
+    }
+}
+
+@Composable private fun ReceiptDataLine(left: String, right: String, bold: Boolean = false, size: TextUnit = 10.sp) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(left, Modifier.weight(1f), color = Color(0xFF343139), fontSize = size, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, fontFamily = FontFamily.Monospace, maxLines = 1)
+        Text(right, color = Color(0xFF17151B), fontSize = size, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, fontFamily = FontFamily.Monospace, textAlign = TextAlign.End, maxLines = 1)
+    }
+}
+
+@Composable private fun ReceiptDottedRule() {
+    Canvas(Modifier.fillMaxWidth().height(1.dp)) { drawLine(Color(0xFF89858D), androidx.compose.ui.geometry.Offset.Zero.copy(y = size.height / 2), androidx.compose.ui.geometry.Offset(size.width, size.height / 2), 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 3.dp.toPx()))) }
+}
+
+private class ReceiptPaperShape : Shape {
+    override fun createOutline(size: Size, layoutDirection: androidx.compose.ui.unit.LayoutDirection, density: androidx.compose.ui.unit.Density): Outline {
+        val tooth = with(density) { 7.dp.toPx() }
+        val path = Path().apply {
+            moveTo(0f, 0f); lineTo(size.width, 0f); lineTo(size.width, size.height - tooth)
+            var x = size.width; var step = 0
+            while (x > 0f) { x = (x - tooth).coerceAtLeast(0f); lineTo(x, if (step++ % 2 == 0) size.height else size.height - tooth) }
+            lineTo(0f, size.height - tooth); close()
+        }
+        return Outline.Generic(path)
+    }
 }
 
 @Composable private fun PrinterDialog(activity: ComponentActivity, onDismiss: () -> Unit, onSelect: (String) -> Unit) {
