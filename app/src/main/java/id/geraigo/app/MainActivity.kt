@@ -28,13 +28,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
@@ -52,7 +48,6 @@ import androidx.room.withTransaction
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import android.content.ClipData
-import android.graphics.BitmapFactory
 import coil.compose.AsyncImage
 import id.geraigo.app.data.*
 import id.geraigo.app.printer.ThermalPrinter
@@ -349,6 +344,8 @@ private class RupiahInputTransformation : VisualTransformation {
 @Composable private fun SaleForm(dao: SaleDao, initial: OrderReceipt?, quickItem: Pair<String, Long>?, settings: StoreSettings, onClose: () -> Unit, onSaved: (OrderReceipt) -> Unit) {
     var items by remember(initial?.key) { mutableStateOf(initial?.items?.map { DraftItem(name = it.name, price = it.price.toString(), quantity = it.quantity.toString(), favorite = it.favorite) } ?: listOf(DraftItem(name = quickItem?.first.orEmpty(), price = quickItem?.second?.takeIf { it > 0 }?.toString().orEmpty()))) }
     var note by remember(initial?.key) { mutableStateOf(initial?.note.orEmpty()) }
+    val previewCreatedAt = remember(initial?.key, quickItem) { initial?.createdAt ?: System.currentTimeMillis() }
+    val receiptKey = remember(initial?.key, quickItem) { initial?.key ?: UUID.randomUUID().toString().replace("-", "") }
     var suggestions by remember { mutableStateOf(emptyList<String>()) }; var focusedItem by remember { mutableIntStateOf(-1) }; var formError by remember { mutableStateOf("") }; val scope = rememberCoroutineScope()
     fun changeItem(index: Int, value: DraftItem) { items = items.toMutableList().also { it[index] = value } }
     val subtotal = items.sumOf { (it.price.toLongOrNull() ?: 0L) * (it.quantity.toIntOrNull() ?: 0) }
@@ -374,7 +371,7 @@ private class RupiahInputTransformation : VisualTransformation {
         TextButton(onClick = { items = items + DraftItem() }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Tambah barang") }
         OutlinedTextField(note, { note = it }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp), label = { Text("Catatan nota (opsional)") }, shape = RoundedCornerShape(14.dp), maxLines = 2)
         Spacer(Modifier.height(18.dp))
-        LiveThermalPreview(items, note, settings, tax, admin)
+        LiveThermalPreview(items, note, settings, tax, admin, previewCreatedAt, receiptKey)
         if (formError.isNotBlank()) Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.ErrorOutline, null, tint = Color(0xFFB42318), modifier = Modifier.size(18.dp)); Text(formError, Modifier.padding(start = 8.dp), color = Color(0xFFB42318), fontSize = 12.sp) }
         Spacer(Modifier.height(14.dp)); Surface(color = Color.White, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(15.dp)) {
             ReceiptDataLine("Subtotal", rupiah(subtotal), size = 12.sp)
@@ -391,7 +388,7 @@ private class RupiahInputTransformation : VisualTransformation {
                 else -> ""
             }
             if (formError.isBlank()) {
-                val key = initial?.key ?: UUID.randomUUID().toString().replace("-", ""); val createdAt = initial?.createdAt ?: System.currentTimeMillis()
+                val key = receiptKey; val createdAt = previewCreatedAt
                 val rows = items.mapIndexed { index, item -> Sale(name = item.name.trim(), price = item.price.toLong(), quantity = item.quantity.toInt(), note = if (index == 0) note.trim() else "", createdAt = createdAt, favorite = item.favorite, receiptKey = key, taxAmount = if (index == 0) tax else 0, adminAmount = if (index == 0) admin else 0, taxPercent = if (index == 0 && settings.taxEnabled) settings.taxPercent else 0.0, adminPercent = if (index == 0 && settings.adminFeeEnabled) settings.adminFeePercent else 0.0) }
                 scope.launch { runCatching { if (initial == null) dao.insertAll(rows) else dao.replaceReceipt(key, rows) }.onSuccess { onSaved(OrderReceipt(key, rows)) }.onFailure { formError = "Transaksi gagal disimpan. Data sebelumnya tetap aman; coba lagi." } }
             }
@@ -400,123 +397,51 @@ private class RupiahInputTransformation : VisualTransformation {
     }
 }
 
-@Composable private fun LiveThermalPreview(drafts: List<DraftItem>, note: String, settings: StoreSettings, tax: Long, admin: Long) {
-    val rows = drafts.mapIndexed { index, item -> Sale(name = item.name.ifBlank { "Nama barang" }, price = item.price.toLongOrNull() ?: 0L, quantity = item.quantity.toIntOrNull() ?: 0, note = if (index == 0) note else "", createdAt = System.currentTimeMillis(), receiptKey = "preview", taxAmount = if (index == 0) tax else 0, adminAmount = if (index == 0) admin else 0, taxPercent = if (index == 0 && settings.taxEnabled) settings.taxPercent else 0.0, adminPercent = if (index == 0 && settings.adminFeeEnabled) settings.adminFeePercent else 0.0) }
-    val sale = OrderReceipt("preview", rows)
+@Composable private fun LiveThermalPreview(drafts: List<DraftItem>, note: String, settings: StoreSettings, tax: Long, admin: Long, createdAt: Long, receiptKey: String) {
+    val rows = drafts.mapIndexed { index, item -> Sale(name = item.name.ifBlank { "Barang" }, price = item.price.toLongOrNull() ?: 0L, quantity = item.quantity.toIntOrNull() ?: 0, note = if (index == 0) note else "", createdAt = createdAt, receiptKey = receiptKey, taxAmount = if (index == 0) tax else 0, adminAmount = if (index == 0) admin else 0, taxPercent = if (index == 0 && settings.taxEnabled) settings.taxPercent else 0.0, adminPercent = if (index == 0 && settings.adminFeeEnabled) settings.adminFeePercent else 0.0) }
+    val sale = remember(rows, createdAt, receiptKey) { OrderReceipt(receiptKey, rows) }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Pratinjau nota", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
             Spacer(Modifier.weight(1f)); Text("THERMAL ${settings.paperWidth} mm", color = Muted, fontSize = 10.sp, letterSpacing = .7.sp)
         }
-        BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            val shape = remember { ReceiptPaperShape() }
-            val width = if (settings.paperWidth == 80) 340.dp else 246.dp
-            Column(Modifier.width(minOf(maxWidth, width)).shadow(7.dp, shape).clip(shape).background(Color.White).padding(horizontal = 17.dp, vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                if (settings.showLogo && settings.logoUri.isNotBlank()) AsyncImage(settings.logoUri, "Logo toko", Modifier.size((settings.imageWidth / 3).coerceIn(42, 80).dp).clip(RoundedCornerShape(4.dp)))
-                Text(settings.name.ifBlank { "Gerai Go" }.uppercase(), Modifier.fillMaxWidth().padding(top = 4.dp), color = Color(0xFF17151B), fontSize = 13.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, fontFamily = FontFamily.Monospace)
-                if (settings.address.isNotBlank()) Text(settings.address, Modifier.fillMaxWidth().padding(top = 3.dp), color = Ink, fontSize = 9.sp, textAlign = TextAlign.Center, fontFamily = FontFamily.Monospace)
-                if (settings.contact.isNotBlank()) Text(settings.contact, Modifier.fillMaxWidth(), color = Ink, fontSize = 9.sp, textAlign = TextAlign.Center, fontFamily = FontFamily.Monospace)
-                if (settings.header.isNotBlank()) Text(settings.header, Modifier.fillMaxWidth().padding(top = 5.dp), color = Ink, fontSize = 9.sp, textAlign = TextAlign.Center, fontFamily = FontFamily.Monospace)
-                Spacer(Modifier.height(8.dp)); ReceiptDottedRule(); Spacer(Modifier.height(7.dp))
-                Text("NOTA PENJUALAN", color = Ink, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                ReceiptDataLine("Waktu", SimpleDateFormat("dd/MM/yy HH:mm", Locale("id", "ID")).format(Date()))
-                Spacer(Modifier.height(6.dp)); ReceiptDottedRule(); Spacer(Modifier.height(7.dp))
-                sale.items.forEach { item ->
-                    Text(item.name, Modifier.fillMaxWidth(), color = Color(0xFF17151B), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace, maxLines = 2)
-                    ReceiptDataLine("${item.quantity} x ${rupiah(item.price)}", rupiah(item.total))
-                }
-                if (note.isNotBlank()) Text("Catatan: $note", Modifier.fillMaxWidth().padding(top = 5.dp), color = Ink, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
-                Spacer(Modifier.height(7.dp)); ReceiptDottedRule(); Spacer(Modifier.height(6.dp))
-                ReceiptDataLine("Subtotal", rupiah(sale.subtotal))
-                if (settings.taxEnabled) ReceiptDataLine("Pajak ${settings.taxPercent}%", rupiah(tax))
-                if (settings.adminFeeEnabled) ReceiptDataLine("Biaya admin ${settings.adminFeePercent}%", rupiah(admin))
-                Spacer(Modifier.height(4.dp)); ReceiptDataLine("TOTAL", rupiah(sale.total), bold = true, size = 13.sp)
-                Spacer(Modifier.height(7.dp)); ReceiptDottedRule()
-                if (settings.showExtraImage && settings.extraImageUri.isNotBlank()) AsyncImage(settings.extraImageUri, "Gambar tambahan nota", Modifier.width((settings.imageWidth / 2).coerceIn(90, 220).dp).heightIn(max = 100.dp).padding(top = 7.dp))
-                if (settings.footer.isNotBlank()) Text(settings.footer, Modifier.fillMaxWidth().padding(top = 8.dp), color = Ink, fontSize = 9.sp, textAlign = TextAlign.Center, fontFamily = FontFamily.Monospace)
-                Spacer(Modifier.height(8.dp))
-            }
-        }
+        ReceiptBitmapPaper(sale, settings, Modifier.fillMaxWidth())
     }
 }
 
 @Composable private fun ReceiptDialog(sale: OrderReceipt, settings: StoreSettings, onClose: () -> Unit, onPrint: () -> Unit, onShareText: () -> Unit, onShareImage: () -> Unit, onSave: () -> Unit) {
-        Column(Modifier.fillMaxSize().background(AppBackground).padding(horizontal = 16.dp, vertical = 10.dp)) {
-            Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) { Text("Nota tersimpan", color = Ink, fontWeight = FontWeight.Bold, fontSize = 21.sp); Text("Pratinjau sesuai lebar kertas ${settings.paperWidth} mm", color = Muted, fontSize = 12.sp) }
-            }
-            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), contentAlignment = Alignment.TopCenter) {
-                val paperShape = remember { ReceiptPaperShape() }
-                val desiredWidth = if (settings.paperWidth == 80) 340.dp else 246.dp
-                Column(
-                    Modifier.width(minOf(maxWidth, desiredWidth)).shadow(12.dp, paperShape).clip(paperShape).background(Color.White).padding(horizontal = 20.dp, vertical = 19.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    if (settings.showLogo && settings.logoUri.isNotBlank()) {
-                        AsyncImage(settings.logoUri, contentDescription = "Logo ${settings.name}", modifier = Modifier.size((settings.imageWidth / 3).coerceIn(42, 90).dp).clip(RoundedCornerShape(5.dp)))
-                        Spacer(Modifier.height(8.dp))
-                    } else {
-                        Box(Modifier.size(34.dp).clip(RoundedCornerShape(11.dp)).background(Color(0xFFF0EAFE)), contentAlignment = Alignment.Center) { Text((settings.name.ifBlank { "G" }).take(1).uppercase(), color = Purple, fontWeight = FontWeight.Bold) }
-                        Spacer(Modifier.height(7.dp))
-                    }
-                    Text(settings.name.ifBlank { "Gerai Go" }.uppercase(), color = Color(0xFF17151B), fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp, textAlign = TextAlign.Center, fontFamily = FontFamily.Monospace)
-                    if (settings.address.isNotBlank()) Text(settings.address, Modifier.padding(top = 4.dp), color = Color(0xFF39363D), fontSize = 10.sp, textAlign = TextAlign.Center, fontFamily = FontFamily.Monospace)
-                    if (settings.contact.isNotBlank()) Text(settings.contact, Modifier.padding(top = 2.dp), color = Color(0xFF39363D), fontSize = 10.sp, textAlign = TextAlign.Center, fontFamily = FontFamily.Monospace)
-                    if (settings.header.isNotBlank()) Text(settings.header, Modifier.padding(top = 7.dp), color = Color(0xFF39363D), fontSize = 10.sp, textAlign = TextAlign.Center, fontFamily = FontFamily.Monospace)
-                    Spacer(Modifier.height(12.dp)); ReceiptDottedRule(); Spacer(Modifier.height(9.dp))
-                    Text("NOTA PENJUALAN", color = Color(0xFF252229), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, fontFamily = FontFamily.Monospace)
-                    Spacer(Modifier.height(6.dp)); ReceiptDataLine("No. nota", "GG-${sale.key.takeLast(6).uppercase()}")
-                    ReceiptDataLine("Waktu", SimpleDateFormat("dd/MM/yyyy  HH:mm", Locale("id", "ID")).format(Date(sale.createdAt)))
-                    Spacer(Modifier.height(8.dp)); ReceiptDottedRule(); Spacer(Modifier.height(9.dp))
-                    sale.items.forEach { item ->
-                        Text(item.name, Modifier.fillMaxWidth(), color = Color(0xFF17151B), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace)
-                        Spacer(Modifier.height(3.dp)); ReceiptDataLine("${item.quantity} x ${rupiah(item.price)}", rupiah(item.total))
-                    }
-                    if (sale.note.isNotBlank()) Text("Catatan: ${sale.note}", Modifier.fillMaxWidth().padding(top = 7.dp), color = Color(0xFF4A464E), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
-                    Spacer(Modifier.height(10.dp)); ReceiptDottedRule(); Spacer(Modifier.height(8.dp))
-                    ReceiptDataLine("Subtotal", rupiah(sale.subtotal))
-                    if (sale.taxAmount > 0) ReceiptDataLine("Pajak ${sale.taxPercent}%", rupiah(sale.taxAmount))
-                    if (sale.adminAmount > 0) ReceiptDataLine("Biaya admin ${sale.adminPercent}%", rupiah(sale.adminAmount))
-                    Spacer(Modifier.height(6.dp)); ReceiptDataLine("TOTAL", rupiah(sale.total), bold = true, size = 14.sp)
-                    Spacer(Modifier.height(9.dp)); ReceiptDottedRule()
-                    if (settings.showExtraImage && settings.extraImageUri.isNotBlank()) {
-                        Spacer(Modifier.height(11.dp)); AsyncImage(settings.extraImageUri, contentDescription = "Gambar tambahan nota", modifier = Modifier.width((settings.imageWidth / 2).coerceIn(90, 240).dp).heightIn(max = 120.dp))
-                    }
-                    if (settings.footer.isNotBlank()) Text(settings.footer, Modifier.fillMaxWidth().padding(top = 12.dp), color = Color(0xFF39363D), fontSize = 10.sp, textAlign = TextAlign.Center, fontFamily = FontFamily.Monospace)
-                    Text("Simpan nota ini sebagai bukti transaksi", Modifier.padding(top = 5.dp), color = Muted, fontSize = 9.sp, textAlign = TextAlign.Center)
-                    Spacer(Modifier.height(12.dp))
-                }
-            }
-            Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                OutlinedButton(onClick = onShareText, modifier = Modifier.weight(1f).height(46.dp), shape = RoundedCornerShape(14.dp), contentPadding = PaddingValues(horizontal = 5.dp)) { Icon(Icons.Default.TextSnippet, null, Modifier.size(17.dp)); Spacer(Modifier.width(4.dp)); Text("Teks", fontSize = 11.sp, maxLines = 1) }
-                OutlinedButton(onClick = onShareImage, modifier = Modifier.weight(1f).height(46.dp), shape = RoundedCornerShape(14.dp), contentPadding = PaddingValues(horizontal = 5.dp)) { Icon(Icons.Default.Image, null, Modifier.size(17.dp)); Spacer(Modifier.width(4.dp)); Text("Gambar", fontSize = 11.sp, maxLines = 1) }
-                OutlinedButton(onClick = onSave, modifier = Modifier.width(86.dp).height(46.dp), shape = RoundedCornerShape(14.dp), contentPadding = PaddingValues(horizontal = 5.dp)) { Icon(Icons.Default.SaveAlt, null, Modifier.size(17.dp)); Spacer(Modifier.width(3.dp)); Text("Simpan", fontSize = 11.sp, maxLines = 1) }
-            }
-            Button(onClick = onPrint, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(50.dp), shape = RoundedCornerShape(17.dp)) { Icon(Icons.Default.Print, null); Spacer(Modifier.width(8.dp)); Text("Cetak nota") }
+    Column(Modifier.fillMaxSize().background(AppBackground).padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) { Text("Nota tersimpan", color = Ink, fontWeight = FontWeight.Bold, fontSize = 21.sp); Text("Preview cetak ${settings.paperWidth} mm", color = Muted, fontSize = 12.sp) }
         }
+        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+            ReceiptBitmapPaper(sale, settings, Modifier.fillMaxWidth())
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            OutlinedButton(onClick = onShareText, modifier = Modifier.weight(1f).height(46.dp), shape = RoundedCornerShape(14.dp), contentPadding = PaddingValues(horizontal = 5.dp)) { Icon(Icons.Default.TextSnippet, null, Modifier.size(17.dp)); Spacer(Modifier.width(4.dp)); Text("Teks", fontSize = 11.sp, maxLines = 1) }
+            OutlinedButton(onClick = onShareImage, modifier = Modifier.weight(1f).height(46.dp), shape = RoundedCornerShape(14.dp), contentPadding = PaddingValues(horizontal = 5.dp)) { Icon(Icons.Default.Image, null, Modifier.size(17.dp)); Spacer(Modifier.width(4.dp)); Text("Gambar", fontSize = 11.sp, maxLines = 1) }
+            OutlinedButton(onClick = onSave, modifier = Modifier.width(86.dp).height(46.dp), shape = RoundedCornerShape(14.dp), contentPadding = PaddingValues(horizontal = 5.dp)) { Icon(Icons.Default.SaveAlt, null, Modifier.size(17.dp)); Spacer(Modifier.width(3.dp)); Text("Simpan", fontSize = 11.sp, maxLines = 1) }
+        }
+        Button(onClick = onPrint, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(50.dp), shape = RoundedCornerShape(17.dp)) { Icon(Icons.Default.Print, null); Spacer(Modifier.width(8.dp)); Text("Cetak nota") }
+    }
+}
+
+@Composable private fun ReceiptBitmapPaper(receipt: OrderReceipt, settings: StoreSettings, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val bitmap = remember(receipt, settings) { id.geraigo.app.receipt.ReceiptRenderer.render(context, receipt, settings) }
+    DisposableEffect(bitmap) { onDispose { if (!bitmap.isRecycled) bitmap.recycle() } }
+    val desiredWidth = if (settings.paperWidth == 80) 340.dp else 246.dp
+    BoxWithConstraints(modifier, contentAlignment = Alignment.TopCenter) {
+        val width = minOf(maxWidth, desiredWidth)
+        Image(bitmap.asImageBitmap(), contentDescription = "Preview struk thermal ${settings.paperWidth} mm", contentScale = androidx.compose.ui.layout.ContentScale.FillBounds,
+            modifier = Modifier.width(width).aspectRatio(bitmap.width.toFloat() / bitmap.height).shadow(8.dp, RoundedCornerShape(2.dp)).background(Color.White))
+    }
 }
 
 @Composable private fun ReceiptDataLine(left: String, right: String, bold: Boolean = false, size: TextUnit = 10.sp) {
     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(left, Modifier.weight(1f), color = Color(0xFF343139), fontSize = size, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, fontFamily = FontFamily.Monospace, maxLines = 1)
         Text(right, color = Color(0xFF17151B), fontSize = size, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, fontFamily = FontFamily.Monospace, textAlign = TextAlign.End, maxLines = 1)
-    }
-}
-
-@Composable private fun ReceiptDottedRule() {
-    Canvas(Modifier.fillMaxWidth().height(1.dp)) { drawLine(Color(0xFF89858D), androidx.compose.ui.geometry.Offset.Zero.copy(y = size.height / 2), androidx.compose.ui.geometry.Offset(size.width, size.height / 2), 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 3.dp.toPx()))) }
-}
-
-private class ReceiptPaperShape : Shape {
-    override fun createOutline(size: Size, layoutDirection: androidx.compose.ui.unit.LayoutDirection, density: androidx.compose.ui.unit.Density): Outline {
-        val tooth = with(density) { 7.dp.toPx() }
-        val path = Path().apply {
-            moveTo(0f, 0f); lineTo(size.width, 0f); lineTo(size.width, size.height - tooth)
-            var x = size.width; var step = 0
-            while (x > 0f) { x = (x - tooth).coerceAtLeast(0f); lineTo(x, if (step++ % 2 == 0) size.height else size.height - tooth) }
-            lineTo(0f, size.height - tooth); close()
-        }
-        return Outline.Generic(path)
     }
 }
 
@@ -604,55 +529,17 @@ private fun shareReceiptImage(context: Context, receipt: OrderReceipt, settings:
 
 private fun receiptText(receipt: OrderReceipt, settings: StoreSettings) = buildString {
     appendLine(settings.name.ifBlank { "Gerai Go" }); if (settings.address.isNotBlank()) appendLine(settings.address); if (settings.contact.isNotBlank()) appendLine(settings.contact)
-    if (settings.header.isNotBlank()) appendLine(settings.header); appendLine("No. nota: GG-${receipt.key.takeLast(6).uppercase()}"); appendLine(dateTimeLabel(receipt.createdAt)); appendLine("------------------------------")
+    if (settings.header.isNotBlank()) appendLine(settings.header); appendLine("------------------------------"); appendLine("NOTA PENJUALAN"); appendLine("No. nota: GG-${receipt.key.takeLast(6).uppercase()}"); appendLine(dateTimeLabel(receipt.createdAt)); appendLine("------------------------------")
     receipt.items.forEach { appendLine(it.name); appendLine("${it.quantity} x ${rupiah(it.price)} = ${rupiah(it.total)}") }
     if (receipt.note.isNotBlank()) appendLine("Catatan: ${receipt.note}")
     appendLine("------------------------------"); appendLine("Subtotal: ${rupiah(receipt.subtotal)}")
-    if (receipt.taxAmount > 0) appendLine("Pajak ${receipt.taxPercent}%: ${rupiah(receipt.taxAmount)}")
-    if (receipt.adminAmount > 0) appendLine("Biaya admin ${receipt.adminPercent}%: ${rupiah(receipt.adminAmount)}")
-    appendLine("TOTAL: ${rupiah(receipt.total)}"); appendLine(settings.footer)
+    if (receipt.taxPercent > 0.0 || receipt.taxAmount > 0) appendLine("Pajak ${receipt.taxPercent}%: ${rupiah(receipt.taxAmount)}")
+    if (receipt.adminPercent > 0.0 || receipt.adminAmount > 0) appendLine("Biaya admin ${receipt.adminPercent}%: ${rupiah(receipt.adminAmount)}")
+    appendLine("TOTAL: ${rupiah(receipt.total)}"); appendLine("------------------------------"); if (settings.footer.isNotBlank()) appendLine(settings.footer)
 }
 
 private fun renderReceiptImage(context: Context, receipt: OrderReceipt, settings: StoreSettings): java.io.File {
-    val width = if (settings.paperWidth == 80) 576 else 384
-    val textSize = 20f
-    val lineHeight = 31f
-    val headerRows = 14 + (if (settings.showLogo && settings.logoUri.isNotBlank()) 5 else 0) + (if (settings.showExtraImage && settings.extraImageUri.isNotBlank()) 7 else 0)
-    val height = ((headerRows + receipt.items.size * 2 + 9) * lineHeight).toInt().coerceAtLeast(400)
-    val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
-    val canvas = android.graphics.Canvas(bitmap)
-    canvas.drawColor(android.graphics.Color.WHITE)
-    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.BLACK; this.textSize = textSize; typeface = android.graphics.Typeface.create("monospace", android.graphics.Typeface.NORMAL) }
-    val bold = android.graphics.Paint(paint).apply { typeface = android.graphics.Typeface.create("monospace", android.graphics.Typeface.BOLD) }
-    var y = 30f
-    fun centered(text: String, typeface: android.graphics.Paint = paint) { canvas.drawText(text.take(45), (width - typeface.measureText(text.take(45))) / 2f, y, typeface); y += lineHeight }
-    fun rule() { canvas.drawLine(20f, y - 8f, width - 20f, y - 8f, paint); y += 8f }
-    if (settings.showLogo && settings.logoUri.isNotBlank()) runCatching {
-        val logo = context.contentResolver.openInputStream(Uri.parse(settings.logoUri))?.use(BitmapFactory::decodeStream)
-        if (logo != null) { val w = minOf(logo.width, width / 2); val h = (logo.height * w.toFloat() / logo.width).toInt(); val scaled = android.graphics.Bitmap.createScaledBitmap(logo, w, h, true); canvas.drawBitmap(scaled, (width - w) / 2f, y, paint); y += h + 10; scaled.recycle(); logo.recycle() }
-    }
-    centered(settings.name.ifBlank { "Gerai Go" }.uppercase(), bold)
-    if (settings.address.isNotBlank()) centered(settings.address)
-    if (settings.contact.isNotBlank()) centered(settings.contact)
-    if (settings.header.isNotBlank()) centered(settings.header)
-    centered("GG-${receipt.key.takeLast(6).uppercase()}")
-    centered(dateTimeLabel(receipt.createdAt)); rule()
-    receipt.items.forEach { item ->
-        canvas.drawText(item.name.take(42), 20f, y, bold); y += lineHeight
-        val left = "${item.quantity} x ${rupiah(item.price)}"; canvas.drawText(left.take(24), 20f, y, paint); canvas.drawText(rupiah(item.total), width - 20f - paint.measureText(rupiah(item.total)), y, paint); y += lineHeight
-    }
-    if (receipt.note.isNotBlank()) { canvas.drawText("Catatan: ${receipt.note}".take(44), 20f, y, paint); y += lineHeight }
-    rule()
-    fun totals(label: String, amount: Long, isBold: Boolean = false) { val p = if (isBold) bold else paint; canvas.drawText(label, 20f, y, p); val amountText = rupiah(amount); canvas.drawText(amountText, width - 20f - p.measureText(amountText), y, p); y += lineHeight }
-    totals("Subtotal", receipt.subtotal)
-    if (receipt.taxAmount > 0) totals("Pajak ${receipt.taxPercent}%", receipt.taxAmount)
-    if (receipt.adminAmount > 0) totals("Biaya admin ${receipt.adminPercent}%", receipt.adminAmount)
-    totals("TOTAL", receipt.total, true)
-    if (settings.showExtraImage && settings.extraImageUri.isNotBlank()) runCatching {
-        val extra = context.contentResolver.openInputStream(Uri.parse(settings.extraImageUri))?.use(BitmapFactory::decodeStream)
-        if (extra != null) { val w = minOf(extra.width, width - 40); val h = (extra.height * w.toFloat() / extra.width).toInt().coerceAtMost(180); val scaled = android.graphics.Bitmap.createScaledBitmap(extra, w, h, true); canvas.drawBitmap(scaled, (width - w) / 2f, y, paint); y += h + 8; scaled.recycle(); extra.recycle() }
-    }
-    if (settings.footer.isNotBlank()) centered(settings.footer)
+    val bitmap = id.geraigo.app.receipt.ReceiptRenderer.render(context, receipt, settings)
     val directory = java.io.File(context.cacheDir, "receipts").apply { mkdirs() }
     val file = java.io.File(directory, "nota-${receipt.key}.png")
     file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
