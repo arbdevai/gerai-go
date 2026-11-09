@@ -13,23 +13,23 @@
 - [x] **Dashboard Math Safety:** Memasang zero-division guard pada Pie Chart dan rasio Bar/Line Chart. Menjaga integritas data saat transaksi Rp 0.
 - [x] **Data Integrity & Relasi:** Memperbaiki resolusi `taxPercent` dan `adminPercent` pada `OrderReceipt` menggunakan `maxOfOrNull` agar tidak terpengaruh urutan pengembalian item dari query database.
 - [x] **Auto Backup Resiliency:** Memperbaiki relative path MediaStore dokumen, pembersihan backup lama berbasis regex, dan mengembalikan `Result.retry()` saat offline/gagal agar WorkManager melakukan retry otomatis.
-- [x] **Modular Architecture:** Memecah monolit `MainActivity.kt` (629 baris) menjadi modul-modul terpisah:
-  - `id.geraigo.app.ui.theme.Theme.kt` (True Dark OLED `#000000` & `#121212` + Clean Light Material 3)
-  - `id.geraigo.app.ui.components.Shimmer.kt` (Skeleton screen shimmer per skill 1.D)
-  - `id.geraigo.app.ui.components.CommonUi.kt` (StatusBanner, FloatingNavDock, ScreenHeader, EmptyState, Helper Format)
-  - `id.geraigo.app.ui.components.InputTransformation.kt` (RupiahInputTransformation)
-  - `id.geraigo.app.ui.screens.CashScreen.kt` (Layar Kas + Skeleton Shimmer)
-  - `id.geraigo.app.ui.screens.HistoryScreen.kt` (Riwayat, Pencarian, Filter Kalender, Menu Aksi)
-  - `id.geraigo.app.ui.screens.DashboardScreen.kt` (Metrik Finansial, Grafik Garis, Batang, dan Lingkaran)
-  - `id.geraigo.app.ui.screens.SettingsScreen.kt` (Pengaturan Toko, Gambar Logo, Kertas, Pajak, Printer, Drive, Ekspor/Impor)
-  - `id.geraigo.app.ui.screens.SaleFormDialog.kt` (Form Multi-Item + Autocomplete + `.imePadding()`)
-  - `id.geraigo.app.ui.screens.ReceiptDialog.kt` (Pratinjau Struk, Bagikan Teks/Gambar, Simpan File)
-  - `id.geraigo.app.ui.screens.PrinterDialog.kt` (Dialog Pemilih Printer Bluetooth Aman)
-  - `id.geraigo.app.MainActivity.kt` (Entrypoint ringkas berbasis `collectAsStateWithLifecycle`)
+- [x] **Modular Architecture:** Memecah monolit `MainActivity.kt` (629 baris) menjadi modul-modul terpisah.
 - [x] **Infrastruktur Build & Chroot Standard:** Menambahkan `gradlew` (executable), `gradle/wrapper/` (Gradle 8.9), dan `ksp.useKSP2=false` pada `gradle.properties`.
-- [x] **Keyboard Safety:** Menambahkan `.imePadding()` pada `SaleFormDialog` untuk mencegah keyboard virtual menutupi input dan tombol aksi.
 - [x] **Pre-flight Linter:** Lolos 100% verifikasi sintaksis `verify_kotlin_syntax.py` (0 Error, 0 Warning).
-- [x] **Cloud CI Compilation (GitHub Actions):** Build sukses 100% pada Run ID `42599221707` dalam 2 menit 21 detik. APK Release (`gerai-go-release.apk`) berhasil ditandatangani (v1, v2, v3 signature) dan dipublikasikan ke GitHub Releases tag `ci-latest`.
 
-### 2. Status Proyek Saat Ini
-- Proyek versi 1.1.0 (`versionCode 10100`) stabil, bersih, dan siap digunakan langsung.
+### 2. Fitur Baru & Peningkatan UX Kasir Cepat (v1.2.0)
+- [x] **Alur Kasir Cepat (Enter Key Navigation):**
+  - Input Nama Barang $\rightarrow$ tekan Enter $\rightarrow$ otomatis lompat ke input Harga.
+  - Input Harga $\rightarrow$ tekan Enter $\rightarrow$ otomatis lompat ke input Jumlah.
+  - Input Jumlah $\rightarrow$ tekan Enter $\rightarrow$ otomatis menambah baris barang baru dan fokus ke nama barang selanjutnya tanpa perlu klik manual.
+- [x] **Live Thermal Preview Real-time:** Menampilkan kertas struk thermal 58/80 mm langsung di bawah formulir input barang dan catatan secara real-time saat kasir mengetik.
+- [x] **In-App Updater System:**
+  - Mengimplementasikan `AppUpdateManager` berbasis OkHttp streaming terisolasi dengan file sementara `.part` (buffer 64 KB).
+  - Pengecekan rilis GitHub Releases otomatis via API.
+  - Verifikasi integritas APK 4 lapis (`isApkValid`: physical size > 8MB, deep DEX & signing certs parse, exact package name match, valid version code).
+  - Pemicuan installer aman via `FileProvider` + permission guard `canRequestPackageInstalls()`.
+  - UI pembaruan di `SettingsScreen`: kartu versi aplikasi, dialog unduh ber-progress bar realtime, dan tombol instalasi instan.
+
+### 3. Status Proyek Saat Ini
+- Versi: **1.2.0** (`versionCode 10200`).
+- Siap build dan rilis via GitHub Actions CI.

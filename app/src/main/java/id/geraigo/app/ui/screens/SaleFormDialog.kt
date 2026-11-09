@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -12,9 +13,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.TextUnit
@@ -26,6 +30,7 @@ import id.geraigo.app.data.SaleDao
 import id.geraigo.app.data.StoreSettings
 import id.geraigo.app.ui.components.RupiahInputTransformation
 import id.geraigo.app.ui.components.rupiah
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
 import kotlin.math.roundToLong
@@ -73,8 +78,27 @@ fun SaleFormDialog(
     var formError by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
+    // Dynamic focus requesters for rapid Enter-key jumping
+    val nameFocusRequesters = remember { mutableStateListOf<FocusRequester>() }
+    val priceFocusRequesters = remember { mutableStateListOf<FocusRequester>() }
+    val qtyFocusRequesters = remember { mutableStateListOf<FocusRequester>() }
+
+    while (nameFocusRequesters.size < items.size) nameFocusRequesters.add(FocusRequester())
+    while (priceFocusRequesters.size < items.size) priceFocusRequesters.add(FocusRequester())
+    while (qtyFocusRequesters.size < items.size) qtyFocusRequesters.add(FocusRequester())
+
     fun changeItem(index: Int, value: DraftItem) {
         items = items.toMutableList().also { it[index] = value }
+    }
+
+    fun addNewItemAndFocus() {
+        items = items + DraftItem()
+        scope.launch {
+            delay(80)
+            if (nameFocusRequesters.size >= items.size) {
+                nameFocusRequesters[items.lastIndex].requestFocus()
+            }
+        }
     }
 
     val appliedSettings = remember(initial, settings) {
@@ -113,7 +137,7 @@ fun SaleFormDialog(
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    "Tambah beberapa barang dalam satu nota",
+                    "Ketik barang, tekan Enter untuk langsung mengisi harga & jumlah",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
                 )
@@ -164,11 +188,24 @@ fun SaleFormDialog(
                                 suggestions = if (value.length >= 2) dao.suggestions(value) else emptyList()
                             }
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(nameFocusRequesters.getOrElse(index) { FocusRequester() }),
                         label = { Text("Nama barang") },
                         placeholder = { Text("Ketik nama barang") },
                         shape = RoundedCornerShape(12.dp),
-                        singleLine = true
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                            imeAction = ImeAction.Next
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onNext = {
+                                if (priceFocusRequesters.size > index) {
+                                    priceFocusRequesters[index].requestFocus()
+                                }
+                            }
+                        )
                     )
 
                     if (focusedItem == index && suggestions.isNotEmpty()) {
@@ -182,6 +219,9 @@ fun SaleFormDialog(
                                     scope.launch {
                                         dao.latestPrice(suggestionName)?.let { p ->
                                             changeItem(index, items[index].copy(price = p.toString()))
+                                        }
+                                        if (priceFocusRequesters.size > index) {
+                                            priceFocusRequesters[index].requestFocus()
                                         }
                                     }
                                 }
@@ -204,9 +244,21 @@ fun SaleFormDialog(
                             onValueChange = { input ->
                                 changeItem(index, item.copy(price = input.filter(Char::isDigit).take(12)))
                             },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .focusRequester(priceFocusRequesters.getOrElse(index) { FocusRequester() }),
                             label = { Text("Harga · Rp") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Number,
+                                imeAction = ImeAction.Next
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onNext = {
+                                    if (qtyFocusRequesters.size > index) {
+                                        qtyFocusRequesters[index].requestFocus()
+                                    }
+                                }
+                            ),
                             visualTransformation = RupiahInputTransformation(),
                             shape = RoundedCornerShape(12.dp),
                             singleLine = true
@@ -216,9 +268,28 @@ fun SaleFormDialog(
                             onValueChange = { input ->
                                 changeItem(index, item.copy(quantity = input.filter(Char::isDigit).take(4)))
                             },
-                            modifier = Modifier.width(100.dp),
+                            modifier = Modifier
+                                .width(100.dp)
+                                .focusRequester(qtyFocusRequesters.getOrElse(index) { FocusRequester() }),
                             label = { Text("Jumlah") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Number,
+                                imeAction = if (index == items.lastIndex) ImeAction.Done else ImeAction.Next
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onDone = {
+                                    if (item.name.isNotBlank() && (item.price.toLongOrNull() ?: 0L) > 0L) {
+                                        addNewItemAndFocus()
+                                    }
+                                },
+                                onNext = {
+                                    if (index < items.lastIndex) {
+                                        nameFocusRequesters[index + 1].requestFocus()
+                                    } else {
+                                        addNewItemAndFocus()
+                                    }
+                                }
+                            ),
                             shape = RoundedCornerShape(12.dp),
                             singleLine = true
                         )
@@ -244,7 +315,7 @@ fun SaleFormDialog(
         }
 
         TextButton(
-            onClick = { items = items + DraftItem() },
+            onClick = { addNewItemAndFocus() },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 8.dp)
@@ -265,13 +336,24 @@ fun SaleFormDialog(
             maxLines = 2
         )
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(18.dp))
+
+        // Direct Live Thermal Preview below inputs
+        LiveThermalPreview(
+            drafts = items,
+            note = note,
+            settings = appliedSettings,
+            tax = tax,
+            admin = admin,
+            createdAt = previewCreatedAt,
+            receiptKey = receiptKey
+        )
 
         if (formError.isNotBlank()) {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 8.dp),
+                    .padding(top = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(Icons.Default.ErrorOutline, null, tint = Color(0xFFD32F2F), modifier = Modifier.size(18.dp))
@@ -279,6 +361,8 @@ fun SaleFormDialog(
                 Text(formError, color = Color(0xFFD32F2F), fontSize = 12.sp)
             }
         }
+
+        Spacer(Modifier.height(14.dp))
 
         // Summary box
         Surface(
@@ -300,7 +384,7 @@ fun SaleFormDialog(
             }
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(14.dp))
 
         Button(
             onClick = {
@@ -354,6 +438,41 @@ fun SaleFormDialog(
         }
 
         Spacer(Modifier.height(30.dp))
+    }
+}
+
+@Composable
+private fun LiveThermalPreview(
+    drafts: List<DraftItem>,
+    note: String,
+    settings: StoreSettings,
+    tax: Long,
+    admin: Long,
+    createdAt: Long,
+    receiptKey: String
+) {
+    val rows = drafts.mapIndexed { index, item ->
+        Sale(
+            name = item.name.ifBlank { "Barang" },
+            price = item.price.toLongOrNull() ?: 0L,
+            quantity = item.quantity.toIntOrNull() ?: 0,
+            note = if (index == 0) note else "",
+            createdAt = createdAt,
+            receiptKey = receiptKey,
+            taxAmount = if (index == 0) tax else 0L,
+            adminAmount = if (index == 0) admin else 0L,
+            taxPercent = if (index == 0 && settings.taxEnabled) settings.taxPercent else 0.0,
+            adminPercent = if (index == 0 && settings.adminFeeEnabled) settings.adminFeePercent else 0.0
+        )
+    }
+    val sale = remember(rows, createdAt, receiptKey) { OrderReceipt(receiptKey, rows) }
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Pratinjau nota langsung", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            Spacer(Modifier.weight(1f))
+            Text("THERMAL ${settings.paperWidth} mm", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, letterSpacing = 0.7.sp)
+        }
+        ReceiptBitmapPaper(sale, settings, Modifier.fillMaxWidth())
     }
 }
 

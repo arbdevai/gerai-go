@@ -25,6 +25,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import id.geraigo.app.BuildConfig
 import id.geraigo.app.backup.AutoBackup
 import id.geraigo.app.backup.BackupCodec
 import id.geraigo.app.data.OrderReceipt
@@ -32,6 +33,10 @@ import id.geraigo.app.data.StoreSettings
 import id.geraigo.app.printer.ThermalPrinter
 import id.geraigo.app.ui.components.ScreenHeader
 import id.geraigo.app.ui.components.dateTimeLabel
+import id.geraigo.app.updater.AppUpdateManager
+import id.geraigo.app.updater.UpdateUiState
+import kotlinx.coroutines.launch
+import java.io.File
 
 @Composable
 fun SettingsScreen(
@@ -45,7 +50,11 @@ fun SettingsScreen(
     onRestore: (Uri) -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var model by remember(settings) { mutableStateOf(settings) }
+
+    var updateState by remember { mutableStateOf<UpdateUiState>(UpdateUiState.Idle) }
+    var updateDialogOpen by remember { mutableStateOf(false) }
 
     val chooseLogo = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
@@ -317,7 +326,172 @@ fun SettingsScreen(
             }
         }
 
+        Spacer(Modifier.height(24.dp))
+
+        // In-App Updater
+        Text("Pembaruan Aplikasi", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp)
+        Text(
+            "Versi saat ini: ${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(top = 2.dp)
+        )
+
+        OutlinedButton(
+            onClick = {
+                updateDialogOpen = true
+                scope.launch {
+                    updateState = UpdateUiState.Checking
+                    updateState = AppUpdateManager.checkUpdate(context)
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Icon(Icons.Default.SystemUpdate, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Periksa Pembaruan")
+        }
+
         Spacer(Modifier.height(100.dp))
+    }
+
+    if (updateDialogOpen) {
+        AlertDialog(
+            onDismissRequest = {
+                if (updateState !is UpdateUiState.Downloading) {
+                    updateDialogOpen = false
+                }
+            },
+            title = {
+                Text("Pembaruan Gerai Go", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            },
+            text = {
+                Column(Modifier.fillMaxWidth()) {
+                    when (val state = updateState) {
+                        UpdateUiState.Idle, UpdateUiState.Checking -> {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(vertical = 12.dp)
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(12.dp))
+                                Text("Memeriksa rilis terbaru...", fontSize = 13.sp)
+                            }
+                        }
+                        is UpdateUiState.Available -> {
+                            Text("Versi ${state.versionName} tersedia untuk diunduh.", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "Ukuran: %.1f MB".format(state.apkSize / (1024f * 1024f)),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp
+                            )
+                            if (state.releaseNotes.isNotBlank()) {
+                                Spacer(Modifier.height(8.dp))
+                                Text("Catatan Rilis:", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                Text(
+                                    state.releaseNotes,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 4
+                                )
+                            }
+                        }
+                        is UpdateUiState.Downloading -> {
+                            Text("Mengunduh pembaruan...", fontSize = 13.sp)
+                            Spacer(Modifier.height(8.dp))
+                            LinearProgressIndicator(
+                                progress = { state.progress },
+                                modifier = Modifier.fillMaxWidth().height(8.dp),
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            val pct = (state.progress * 100).toInt()
+                            val downloadedMb = state.downloadedBytes / (1024f * 1024f)
+                            val totalMb = state.totalBytes / (1024f * 1024f)
+                            Text(
+                                "$pct% (%.1f MB / %.1f MB)".format(downloadedMb, totalMb),
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        is UpdateUiState.ReadyToInstall -> {
+                            Text(
+                                "Berkas APK pembaruan berhasil diunduh dan lolos verifikasi integritas.",
+                                fontSize = 13.sp,
+                                color = Color(0xFF2E7D32)
+                            )
+                        }
+                        UpdateUiState.UpToDate -> {
+                            Text(
+                                "Aplikasi Gerai Go sudah menggunakan versi paling baru.",
+                                fontSize = 13.sp
+                            )
+                        }
+                        is UpdateUiState.Error -> {
+                            Text(
+                                "Pemeriksaan gagal: ${state.message}",
+                                fontSize = 13.sp,
+                                color = Color(0xFFD32F2F)
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                when (val state = updateState) {
+                    is UpdateUiState.Available -> {
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    updateState = UpdateUiState.Downloading(0f, 0L, state.apkSize)
+                                    val result = AppUpdateManager.downloadApk(
+                                        context = context,
+                                        downloadUrl = state.downloadUrl,
+                                        expectedBytes = state.apkSize
+                                    ) { progress, downloaded, total ->
+                                        updateState = UpdateUiState.Downloading(progress, downloaded, total)
+                                    }
+                                    result.onSuccess { apkFile ->
+                                        updateState = UpdateUiState.ReadyToInstall(apkFile, state.versionName)
+                                    }.onFailure { exc ->
+                                        updateState = UpdateUiState.Error(exc.message ?: "Gagal mengunduh APK.")
+                                    }
+                                }
+                            }
+                        ) {
+                            Text("Unduh Sekarang")
+                        }
+                    }
+                    is UpdateUiState.ReadyToInstall -> {
+                        Button(
+                            onClick = {
+                                AppUpdateManager.installApk(context, state.apkFile)
+                                updateDialogOpen = false
+                            }
+                        ) {
+                            Text("Pasang Pembaruan")
+                        }
+                    }
+                    else -> {
+                        if (updateState !is UpdateUiState.Downloading) {
+                            TextButton(onClick = { updateDialogOpen = false }) {
+                                Text("Tutup")
+                            }
+                        }
+                    }
+                }
+            },
+            dismissButton = {
+                if (updateState is UpdateUiState.Available) {
+                    TextButton(onClick = { updateDialogOpen = false }) {
+                        Text("Nanti")
+                    }
+                }
+            }
+        )
     }
 }
 
