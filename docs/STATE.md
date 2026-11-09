@@ -25,10 +25,13 @@
 - [x] **Live Thermal Preview Real-time:** Menampilkan kertas struk thermal 58/80 mm langsung di bawah formulir input barang dan catatan secara real-time saat kasir mengetik.
 - [x] **In-App Updater System:**
   - Mengimplementasikan `AppUpdateManager` berbasis OkHttp streaming terisolasi dengan file sementara `.part` (buffer 64 KB).
-  - Pengecekan rilis GitHub Releases otomatis via API.
+  - Pengecekan rilis GitHub Releases otomatis via API dengan perbandingan SemVer numerik hierarkis (`Major -> Minor -> Patch`) terhadap `BuildConfig.VERSION_NAME`.
   - Verifikasi integritas APK 4 lapis (`isApkValid`: physical size > 8MB, deep DEX & signing certs parse, exact package name match, valid version code).
   - Pemicuan installer aman via `FileProvider` + permission guard `canRequestPackageInstalls()`.
   - UI pembaruan di `SettingsScreen`: kartu versi aplikasi, dialog unduh ber-progress bar realtime, dan tombol instalasi instan.
+- [x] **Standardisasi Rilis GitHub & Changelog Dinamis:**
+  - Menambahkan `.github/scripts/generate_release_notes.py` untuk ekstraksi riwayat git dan tabel checksum SHA-256 otomatis.
+  - Workflow GitHub Actions otomatis membuat tag versi rilis resmi (`v1.2.0`) dengan aset APK bertanda tangan (`gerai-go-v1.2.0.apk`), serta memperbarui rolling tag `ci-latest`.
 
 ### 3. Status Proyek Saat Ini
 - Versi: **1.2.0** (`versionCode 10200`).

@@ -424,10 +424,11 @@ fun SettingsScreen(
                                 color = Color(0xFF2E7D32)
                             )
                         }
-                        UpdateUiState.UpToDate -> {
+                        is UpdateUiState.UpToDate -> {
                             Text(
-                                "Aplikasi Gerai Go sudah menggunakan versi paling baru.",
-                                fontSize = 13.sp
+                                "Aplikasi Gerai Go sudah menggunakan versi paling baru (v${state.currentVersion}).",
+                                fontSize = 13.sp,
+                                color = Color(0xFF2E7D32)
                             )
                         }
                         is UpdateUiState.Error -> {

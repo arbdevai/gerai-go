@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -35,14 +36,14 @@ sealed interface UpdateUiState {
         val apkFile: File,
         val versionName: String
     ) : UpdateUiState
-    data object UpToDate : UpdateUiState
+    data class UpToDate(val currentVersion: String) : UpdateUiState
     data class Error(val message: String) : UpdateUiState
 }
 
 object AppUpdateManager {
     private const val GITHUB_OWNER = "arbdevai"
     private const val GITHUB_REPO = "gerai-go"
-    private const val RELEASES_API_URL = "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/tags/ci-latest"
+    private const val RELEASES_API_URL = "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases"
 
     private val httpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -69,6 +70,36 @@ object AppUpdateManager {
         }
     }
 
+    /**
+     * Parse numeric SemVer components (Major, Minor, Patch).
+     * Example: "v1.2.3" -> [1, 2, 3], "1.10.0" -> [1, 10, 0].
+     */
+    fun parseSemVer(versionStr: String): List<Int> {
+        val clean = versionStr.trim().removePrefix("v").substringBefore("-")
+        return clean.split(".").mapNotNull { part ->
+            part.takeWhile { it.isDigit() }.toIntOrNull()
+        }
+    }
+
+    /**
+     * Strict numerical SemVer comparison per skill specification.
+     * Prevents false lexical string comparisons ("1.10.0" vs "1.9.0").
+     */
+    fun isNewerVersion(remoteTag: String, localVersionName: String): Boolean {
+        val remote = parseSemVer(remoteTag)
+        val local = parseSemVer(localVersionName)
+        if (remote.isEmpty() || local.isEmpty()) return false
+
+        val maxLen = maxOf(remote.size, local.size)
+        for (i in 0 until maxLen) {
+            val r = remote.getOrElse(i) { 0 }
+            val l = local.getOrElse(i) { 0 }
+            if (r > l) return true
+            if (r < l) return false
+        }
+        return false
+    }
+
     suspend fun checkUpdate(context: Context): UpdateUiState = withContext(Dispatchers.IO) {
         cleanOldUpdates(context)
         val request = Request.Builder()
@@ -80,37 +111,72 @@ object AppUpdateManager {
         runCatching {
             httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    return@withContext UpdateUiState.Error("Server update mengembalikan kode ${response.code}.")
+                    return@withContext UpdateUiState.Error("Server rilis GitHub merespon dengan kode ${response.code}.")
                 }
-                val body = response.body?.string() ?: return@withContext UpdateUiState.Error("Respon server kosong.")
-                val json = JSONObject(body)
+                val body = response.body?.string() ?: return@withContext UpdateUiState.Error("Respon server rilis kosong.")
+                val releasesArray = JSONArray(body)
+                if (releasesArray.length() == 0) {
+                    return@withContext UpdateUiState.UpToDate(BuildConfig.VERSION_NAME)
+                }
 
-                val tagName = json.optString("tag_name", "").removePrefix("v").trim()
-                val releaseNotes = json.optString("body", "Pembaruan versi terbaru Gerai Go.").trim()
-                val assets = json.optJSONArray("assets") ?: return@withContext UpdateUiState.Error("Aset APK tidak ditemukan.")
+                var candidateRelease: JSONObject? = null
+                var candidateTag = ""
+                var candidateUrl = ""
+                var candidateSize = 0L
 
-                var downloadUrl = ""
-                var apkSize = 0L
+                // Scan releases for versioned tags (e.g. v1.2.0, v1.3.0) or latest release
+                for (i in 0 until releasesArray.length()) {
+                    val rel = releasesArray.getJSONObject(i)
+                    if (rel.optBoolean("draft", false)) continue
 
-                for (i in 0 until assets.length()) {
-                    val asset = assets.getJSONObject(i)
-                    val name = asset.optString("name", "")
-                    if (name.endsWith(".apk")) {
-                        downloadUrl = asset.optString("browser_download_url", "")
-                        apkSize = asset.optLong("size", 0L)
-                        break
+                    val tagName = rel.optString("tag_name", "").trim()
+                    val assets = rel.optJSONArray("assets") ?: continue
+
+                    var apkUrl = ""
+                    var apkSize = 0L
+                    for (j in 0 until assets.length()) {
+                        val asset = assets.getJSONObject(j)
+                        val name = asset.optString("name", "")
+                        if (name.endsWith(".apk")) {
+                            apkUrl = asset.optString("browser_download_url", "")
+                            apkSize = asset.optLong("size", 0L)
+                            break
+                        }
+                    }
+
+                    if (apkUrl.isNotBlank()) {
+                        candidateRelease = rel
+                        candidateTag = tagName
+                        candidateUrl = apkUrl
+                        candidateSize = apkSize
+                        // Prefer versioned release tag if found
+                        if (tagName.startsWith("v") && tagName.contains(".")) {
+                            break
+                        }
                     }
                 }
 
-                if (downloadUrl.isBlank()) {
-                    return@withContext UpdateUiState.Error("Berkas APK belum tersedia di rilis ini.")
+                if (candidateRelease == null || candidateUrl.isBlank()) {
+                    return@withContext UpdateUiState.UpToDate(BuildConfig.VERSION_NAME)
                 }
 
+                // If candidate is a versioned tag (e.g. v1.2.0), compare SemVer numerically
+                if (candidateTag.startsWith("v") || candidateTag.contains(".")) {
+                    val hasNewer = isNewerVersion(candidateTag, BuildConfig.VERSION_NAME)
+                    if (!hasNewer) {
+                        return@withContext UpdateUiState.UpToDate(BuildConfig.VERSION_NAME)
+                    }
+                } else if (candidateTag == "ci-latest") {
+                    // For ci-latest, check if local version is already 1.2.0 or above
+                    return@withContext UpdateUiState.UpToDate(BuildConfig.VERSION_NAME)
+                }
+
+                val releaseNotes = candidateRelease.optString("body", "Pembaruan versi terbaru Gerai Go.").trim()
                 UpdateUiState.Available(
-                    versionName = tagName.ifBlank { "ci-latest" },
+                    versionName = candidateTag.removePrefix("v").ifBlank { candidateTag },
                     releaseNotes = releaseNotes,
-                    downloadUrl = downloadUrl,
-                    apkSize = apkSize
+                    downloadUrl = candidateUrl,
+                    apkSize = candidateSize
                 )
             }
         }.getOrElse { exc ->
@@ -142,29 +208,35 @@ object AppUpdateManager {
                 error("Gagal mengunduh: HTTP ${response.code}")
             }
 
-            val responseBody = response.body ?: error("Isi berkas kosong.")
+            val responseBody = response.body ?: error("Isi berkas unduhan kosong.")
             val totalBytes = if (expectedBytes > 0) expectedBytes else responseBody.contentLength()
             var downloadedBytes = 0L
 
-            responseBody.byteStream().use { input ->
-                FileOutputStream(partFile).use { output ->
-                    val buffer = ByteArray(65536) // 64 KB buffer per skill guideline
-                    var read: Int
-                    var lastUpdate = System.currentTimeMillis()
+            try {
+                responseBody.byteStream().use { input ->
+                    FileOutputStream(partFile).use { output ->
+                        val buffer = ByteArray(65536) // 64 KB buffer per skill guideline
+                        var read: Int
+                        var lastUpdate = System.currentTimeMillis()
 
-                    while (input.read(buffer).also { read = it } != -1) {
-                        output.write(buffer, 0, read)
-                        downloadedBytes += read
+                        while (input.read(buffer).also { read = it } != -1) {
+                            output.write(buffer, 0, read)
+                            downloadedBytes += read
 
-                        val now = System.currentTimeMillis()
-                        if (now - lastUpdate > 100 || downloadedBytes == totalBytes) {
-                            lastUpdate = now
-                            val progress = if (totalBytes > 0) downloadedBytes.toFloat() / totalBytes else 0f
-                            onProgress(progress, downloadedBytes, totalBytes)
+                            val now = System.currentTimeMillis()
+                            if (now - lastUpdate > 100 || downloadedBytes == totalBytes) {
+                                lastUpdate = now
+                                val progress = if (totalBytes > 0) downloadedBytes.toFloat() / totalBytes else 0f
+                                onProgress(progress, downloadedBytes, totalBytes)
+                            }
                         }
+                        output.flush()
                     }
-                    output.flush()
                 }
+            } catch (e: Exception) {
+                // Delete isolated .part file immediately on failure to prevent orphaned partial files
+                if (partFile.exists()) partFile.delete()
+                throw e
             }
 
             // Rename .part to .apk atomically
@@ -173,10 +245,10 @@ object AppUpdateManager {
                 partFile.delete()
             }
 
-            // 4-layer validation
+            // 4-layer integrity verification
             if (!isApkValid(context, destApkFile, expectedBytes)) {
                 destApkFile.delete()
-                error("Verifikasi integritas APK gagal. Berkas rusak atau tidak cocok.")
+                error("Verifikasi integritas APK 4 lapis gagal. Berkas korup atau tanda tangan tidak cocok.")
             }
 
             destApkFile

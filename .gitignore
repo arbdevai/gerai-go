@@ -6,7 +6,7 @@ app/build/
 dist/
 *.iml
 .idea/
-scripts/
+/scripts/
 __pycache__/
 *.pyc
 
