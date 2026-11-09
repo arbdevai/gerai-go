@@ -37,7 +37,7 @@ jobs:
         with:
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
       - name: Build release APK
-        run: gradle --no-daemon --build-cache :app:assembleRelease
+        run: ./gradlew --no-daemon --build-cache :app:assembleRelease
       - name: Sign APK with configured release key
         if: ${{ env.KEYSTORE_B64 != '' }}
         run: |
