@@ -29,7 +29,7 @@
 - [x] **Infrastruktur Build & Chroot Standard:** Menambahkan `gradlew` (executable), `gradle/wrapper/` (Gradle 8.9), dan `ksp.useKSP2=false` pada `gradle.properties`.
 - [x] **Keyboard Safety:** Menambahkan `.imePadding()` pada `SaleFormDialog` untuk mencegah keyboard virtual menutupi input dan tombol aksi.
 - [x] **Pre-flight Linter:** Lolos 100% verifikasi sintaksis `verify_kotlin_syntax.py` (0 Error, 0 Warning).
+- [x] **Cloud CI Compilation (GitHub Actions):** Build sukses 100% pada Run ID `42599221707` dalam 2 menit 21 detik. APK Release (`gerai-go-release.apk`) berhasil ditandatangani (v1, v2, v3 signature) dan dipublikasikan ke GitHub Releases tag `ci-latest`.
 
 ### 2. Status Proyek Saat Ini
-- Seluruh kode Android Kotlin dan XML valid, memory-safe, dan terisolasi rapi.
-- Siap untuk kompilasi GitHub Actions CI.
+- Proyek versi 1.1.0 (`versionCode 10100`) stabil, bersih, dan siap digunakan langsung.
