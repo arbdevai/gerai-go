@@ -107,6 +107,17 @@ object ReceiptRenderer {
         val receiptDate = Date(receipt.createdAt)
         paired("Tanggal", dateFormat.format(receiptDate))
         paired("Waktu", timeFormat.format(receiptDate))
+        if (receipt.isKasbon) {
+            paired("Status", "KASBON (BELUM LUNAS)", isBold = true)
+            if (receipt.customerName.isNotBlank()) {
+                paired("Pelanggan", receipt.customerName, isBold = true)
+            }
+        } else {
+            paired("Status", "LUNAS (TUNAI)")
+            if (receipt.customerName.isNotBlank()) {
+                paired("Pelanggan", receipt.customerName)
+            }
+        }
         rows += Row(rule = true, spaceBefore = 8)
 
         center("Barang (${receipt.items.size})", isBold = true, before = 2)
@@ -132,6 +143,12 @@ object ReceiptRenderer {
 
         rows += Row(rule = true, spaceBefore = 6)
         rows += Row(left = "TOTAL BAYAR", right = money(receipt.total), bold = true, total = true, spaceBefore = 2)
+        if (receipt.isKasbon) {
+            center("*** BELUM LUNAS (KASBON) ***", isBold = true, before = 4)
+        } else if (receipt.paidCash > 0) {
+            paired("Bayar tunai", money(receipt.paidCash), before = 3)
+            paired("Kembalian", money(receipt.changeAmount), isBold = true)
+        }
         rows += Row(rule = true, spaceBefore = 6)
 
         // Extra promotional / QR image

@@ -64,18 +64,24 @@ fun DashboardScreen(orders: List<OrderReceipt>) {
     ) {
         ScreenHeader("Dashboard", "Ringkasan metrik keuangan dan penjualan")
 
+        val activeKasbon = orders.filter { it.isKasbon }
+        val activeKasbonTotal = activeKasbon.sumOf { it.total }
+
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MetricCard("Pendapatan hari ini", rupiah(today.sumOf { it.total }), Modifier.weight(1f))
+            MetricCard("Kas masuk hari ini", rupiah(today.filter { !it.isKasbon }.sumOf { it.total }), Modifier.weight(1f))
             MetricCard("Transaksi hari ini", "${today.size}", Modifier.weight(1f))
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             val avgToday = if (today.isEmpty()) 0L else today.sumOf { it.total } / today.size
             MetricCard("Rata-rata transaksi", rupiah(avgToday), Modifier.weight(1f))
-            MetricCard("7 hari terakhir", rupiah(week.sumOf { it.total }), Modifier.weight(1f))
+            MetricCard("Kasbon belum lunas", rupiah(activeKasbonTotal), Modifier.weight(1f))
         }
         Spacer(Modifier.height(10.dp))
-        MetricCard("Bulan ini", rupiah(month.sumOf { it.total }), Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            MetricCard("7 hari terakhir", rupiah(week.sumOf { it.total }), Modifier.weight(1f))
+            MetricCard("Bulan ini", rupiah(month.sumOf { it.total }), Modifier.weight(1f))
+        }
 
         Spacer(Modifier.height(18.dp))
         ChartSection("Pemasukan harian · 7 hari") {

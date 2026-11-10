@@ -33,6 +33,25 @@
   - Menambahkan `.github/scripts/generate_release_notes.py` untuk ekstraksi riwayat git dan tabel checksum SHA-256 otomatis.
   - Workflow GitHub Actions otomatis membuat tag versi rilis resmi (`v1.2.0`) dengan aset APK bertanda tangan (`gerai-go-v1.2.0.apk`), serta memperbarui rolling tag `ci-latest`.
 
-### 3. Status Proyek Saat Ini
-- Versi: **1.2.0** (`versionCode 10200`).
+### 3. Fitur Buku Kasbon Digital & Kalkulator Kembalian (v1.3.0)
+- [x] **Zero Master Catalog Tetap Dipertahankan:**
+  - Tetap tidak mewajibkan input katalog produk atau stok di awal. Kasir bebas mengetik barang apa saja di form kasir cepat.
+- [x] **Lipatan Buku Kasbon Digital:**
+  - Migrasi skema database Room `MIGRATION_3_4` (versi 4) menambahkan kolom `isKasbon`, `customerName`, dan `paidCash`.
+  - Filter mode pembayaran instan di form transaksi: `[Lunas (Tunai)]` vs `[Kasbon (Belum Lunas)]`.
+  - Input nama/panggilan pembeli (misal: "Pak RT", "Mbak Sari") yang tersimpan rapi dan dapat dicari di riwayat.
+  - Cetak nota thermal dan teks memuat status jelas `STATUS: KASBON (BELUM LUNAS)` dan `Pelanggan: [Nama]`.
+  - Aksi 1-tap "Tandai Sudah Lunas" di nota dan menu riwayat untuk melunasi kasbon kapan saja tanpa ribet.
+  - Tab Riwayat dilengkapi filter segmen: `[Semua]`, `[Lunas]`, `[Kasbon]` serta badge visual jelas pada daftar transaksi.
+- [x] **Kalkulator Uang Diterima & Kembalian Cepat:**
+  - Chip nominal pintar dinamis: `[Uang Pas]`, dan pembulatan pecahan rupiah terdekat.
+  - Input uang tunai dengan format Rupiah otomatis.
+  - Kalkulasi kembalian real-time dengan tampilan kontras tinggi (Kembalian hijau atau Uang kurang merah muda) agar kasir tidak perlu menghitung manual di luar kepala.
+  - Cetak struk mencantumkan rincian `Bayar tunai` dan `Kembalian`.
+- [x] **Dashboard & Rekap Kas Harian:**
+  - Tab Kas Hari Ini memisahkan total uang masuk riil di laci (Lunas) dengan piutang kasbon hari ini.
+  - Dashboard menampilkan metrik khusus "Kasbon belum lunas" agar pedagang memantau seluruh uang yang belum dibayar pelanggan.
+
+### 4. Status Proyek Saat Ini
+- Versi: **1.3.0** (`versionCode 10300`).
 - Siap build dan rilis via GitHub Actions CI.

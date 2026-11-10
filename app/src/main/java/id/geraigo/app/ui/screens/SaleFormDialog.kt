@@ -71,6 +71,11 @@ fun SaleFormDialog(
     }
 
     var note by remember(initial?.key) { mutableStateOf(initial?.note.orEmpty()) }
+    var isKasbon by remember(initial?.key) { mutableStateOf(initial?.isKasbon ?: false) }
+    var customerName by remember(initial?.key) { mutableStateOf(initial?.customerName.orEmpty()) }
+    var paidCashText by remember(initial?.key) {
+        mutableStateOf(if ((initial?.paidCash ?: 0L) > 0L) initial?.paidCash.toString() else "")
+    }
     val previewCreatedAt = remember(initial?.key, quickItem) { initial?.createdAt ?: System.currentTimeMillis() }
     val receiptKey = remember(initial?.key, quickItem) { initial?.key ?: UUID.randomUUID().toString().replace("-", "") }
     var suggestions by remember { mutableStateOf(emptyList<String>()) }
@@ -113,6 +118,24 @@ fun SaleFormDialog(
     val subtotal = items.sumOf { (it.price.toLongOrNull() ?: 0L) * (it.quantity.toIntOrNull() ?: 0) }
     val tax = if (appliedSettings.taxEnabled) (subtotal * appliedSettings.taxPercent / 100.0).roundToLong() else 0L
     val admin = if (appliedSettings.adminFeeEnabled) (subtotal * appliedSettings.adminFeePercent / 100.0).roundToLong() else 0L
+    val totalAmount = subtotal + tax + admin
+    val paidCashAmount = paidCashText.toLongOrNull() ?: 0L
+    val changeAmount = (paidCashAmount - totalAmount).coerceAtLeast(0L)
+    val shortageAmount = (totalAmount - paidCashAmount).coerceAtLeast(0L)
+
+    val cashSuggestions = remember(totalAmount) {
+        if (totalAmount <= 0L) emptyList<Long>()
+        else {
+            val list = linkedSetOf<Long>()
+            val candidates = listOf(10_000L, 20_000L, 50_000L, 100_000L, 200_000L, 500_000L)
+            val next10k = ((totalAmount + 9_999L) / 10_000L) * 10_000L
+            if (next10k > totalAmount) list.add(next10k)
+            val next50k = ((totalAmount + 49_999L) / 50_000L) * 50_000L
+            if (next50k > totalAmount) list.add(next50k)
+            candidates.filter { it > totalAmount }.take(3).forEach { list.add(it) }
+            list.take(3).toList()
+        }
+    }
 
     Column(
         Modifier
@@ -336,6 +359,157 @@ fun SaleFormDialog(
             maxLines = 2
         )
 
+        Spacer(Modifier.height(14.dp))
+
+        // Payment status & Cash calculator section
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(16.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(Modifier.padding(14.dp)) {
+                Text(
+                    "Metode & Status Pembayaran",
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 14.sp
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = !isKasbon,
+                        onClick = { isKasbon = false },
+                        label = { Text("Lunas (Tunai)") },
+                        leadingIcon = { Icon(Icons.Default.Payments, null, Modifier.size(16.dp)) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = isKasbon,
+                        onClick = { isKasbon = true },
+                        label = { Text("Kasbon (Belum Lunas)") },
+                        leadingIcon = { Icon(Icons.Default.MenuBook, null, Modifier.size(16.dp)) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                if (isKasbon) {
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = customerName,
+                        onValueChange = { customerName = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Nama / Panggilan Pembeli *") },
+                        placeholder = { Text("Contoh: Pak RT, Mbak Sari, Mas Budi") },
+                        leadingIcon = { Icon(Icons.Default.Person, null, Modifier.size(18.dp)) },
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Disimpan di Lipatan Buku Kasbon digital agar tidak lupa.",
+                        color = Color(0xFFE07A5F),
+                        fontSize = 11.sp
+                    )
+                } else {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "Uang Tunai Diterima",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        SuggestionChip(
+                            onClick = { paidCashText = totalAmount.toString() },
+                            label = { Text("Uang Pas", fontSize = 11.sp) }
+                        )
+                        cashSuggestions.forEach { amount ->
+                            SuggestionChip(
+                                onClick = { paidCashText = amount.toString() },
+                                label = { Text(rupiah(amount), fontSize = 11.sp) }
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = paidCashText,
+                        onValueChange = { input ->
+                            paidCashText = input.filter(Char::isDigit).take(12)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Uang Diterima · Rp") },
+                        placeholder = { Text("0") },
+                        visualTransformation = RupiahInputTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true
+                    )
+
+                    if (paidCashAmount > 0L) {
+                        Spacer(Modifier.height(8.dp))
+                        if (paidCashAmount >= totalAmount) {
+                            Surface(
+                                color = Color(0xFF16A34A).copy(alpha = 0.12f),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "Kembalian:",
+                                        color = Color(0xFF16A34A),
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 13.sp
+                                    )
+                                    Spacer(Modifier.weight(1f))
+                                    Text(
+                                        rupiah(changeAmount),
+                                        color = Color(0xFF16A34A),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp
+                                    )
+                                }
+                            }
+                        } else {
+                            Surface(
+                                color = Color(0xFFE07A5F).copy(alpha = 0.12f),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "Uang Masih Kurang:",
+                                        color = Color(0xFFE07A5F),
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 12.sp
+                                    )
+                                    Spacer(Modifier.weight(1f))
+                                    Text(
+                                        rupiah(shortageAmount),
+                                        color = Color(0xFFE07A5F),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Spacer(Modifier.height(18.dp))
 
         // Direct Live Thermal Preview below inputs
@@ -346,7 +520,10 @@ fun SaleFormDialog(
             tax = tax,
             admin = admin,
             createdAt = previewCreatedAt,
-            receiptKey = receiptKey
+            receiptKey = receiptKey,
+            isKasbon = isKasbon,
+            customerName = customerName.trim(),
+            paidCash = if (isKasbon) 0L else paidCashAmount
         )
 
         if (formError.isNotBlank()) {
@@ -380,7 +557,16 @@ fun SaleFormDialog(
                     ReceiptDataRow("Biaya admin ${appliedSettings.adminFeePercent}%", rupiah(admin), size = 12.sp)
                 }
                 HorizontalDivider(Modifier.padding(vertical = 6.dp))
-                ReceiptDataRow("TOTAL", rupiah(subtotal + tax + admin), bold = true, size = 15.sp)
+                ReceiptDataRow("TOTAL", rupiah(totalAmount), bold = true, size = 15.sp)
+                if (isKasbon) {
+                    ReceiptDataRow("Status", "KASBON (BELUM LUNAS)", bold = true, size = 12.sp)
+                    if (customerName.isNotBlank()) {
+                        ReceiptDataRow("Pelanggan", customerName.trim(), bold = true, size = 12.sp)
+                    }
+                } else if (paidCashAmount > 0L) {
+                    ReceiptDataRow("Uang Diterima", rupiah(paidCashAmount), size = 12.sp)
+                    ReceiptDataRow("Kembalian", rupiah(changeAmount), bold = true, size = 13.sp)
+                }
             }
         }
 
@@ -393,11 +579,13 @@ fun SaleFormDialog(
                     items.any { it.name.isBlank() } -> "Nama setiap barang wajib diisi."
                     items.any { (it.price.toLongOrNull() ?: 0L) <= 0L } -> "Harga barang harus lebih dari Rp 0."
                     items.any { (it.quantity.toIntOrNull() ?: 0) <= 0 } -> "Jumlah barang minimal 1."
+                    isKasbon && customerName.isBlank() -> "Nama pembeli wajib diisi untuk transaksi kasbon."
                     else -> ""
                 }
                 if (formError.isBlank()) {
                     val key = receiptKey
                     val createdAt = previewCreatedAt
+                    val finalPaidCash = if (isKasbon) 0L else paidCashAmount
                     val rows = items.mapIndexed { idx, draft ->
                         Sale(
                             name = draft.name.trim(),
@@ -410,7 +598,10 @@ fun SaleFormDialog(
                             taxAmount = if (idx == 0) tax else 0L,
                             adminAmount = if (idx == 0) admin else 0L,
                             taxPercent = if (idx == 0 && appliedSettings.taxEnabled) appliedSettings.taxPercent else 0.0,
-                            adminPercent = if (idx == 0 && appliedSettings.adminFeeEnabled) appliedSettings.adminFeePercent else 0.0
+                            adminPercent = if (idx == 0 && appliedSettings.adminFeeEnabled) appliedSettings.adminFeePercent else 0.0,
+                            isKasbon = isKasbon,
+                            customerName = if (idx == 0) customerName.trim() else "",
+                            paidCash = if (idx == 0) finalPaidCash else 0L
                         )
                     }
 
@@ -449,7 +640,10 @@ private fun LiveThermalPreview(
     tax: Long,
     admin: Long,
     createdAt: Long,
-    receiptKey: String
+    receiptKey: String,
+    isKasbon: Boolean,
+    customerName: String,
+    paidCash: Long
 ) {
     val rows = drafts.mapIndexed { index, item ->
         Sale(
@@ -462,7 +656,10 @@ private fun LiveThermalPreview(
             taxAmount = if (index == 0) tax else 0L,
             adminAmount = if (index == 0) admin else 0L,
             taxPercent = if (index == 0 && settings.taxEnabled) settings.taxPercent else 0.0,
-            adminPercent = if (index == 0 && settings.adminFeeEnabled) settings.adminFeePercent else 0.0
+            adminPercent = if (index == 0 && settings.adminFeeEnabled) settings.adminFeePercent else 0.0,
+            isKasbon = isKasbon,
+            customerName = if (index == 0) customerName else "",
+            paidCash = if (index == 0) paidCash else 0L
         )
     }
     val sale = remember(rows, createdAt, receiptKey) { OrderReceipt(receiptKey, rows) }

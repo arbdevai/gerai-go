@@ -157,6 +157,7 @@ private fun GeraiApp(activity: ComponentActivity, db: GeraiDatabase) {
         orders.filter { order ->
             val matchQuery = query.isBlank() ||
                 order.items.any { it.name.contains(query, ignoreCase = true) || it.note.contains(query, ignoreCase = true) } ||
+                order.customerName.contains(query, ignoreCase = true) ||
                 order.key.contains(query, ignoreCase = true)
             val matchDate = selectedDate == null || sameDay(order.createdAt, selectedDate!!)
             matchQuery && matchDate
@@ -225,7 +226,15 @@ private fun GeraiApp(activity: ComponentActivity, db: GeraiDatabase) {
                             onPrint = { openPrinter(activeReceipt) },
                             onShareText = { shareReceiptText(context, activeReceipt, settings) },
                             onShareImage = { shareReceiptImage(context, activeReceipt, settings) },
-                            onSave = { saveNoteLauncher.launch("nota-${activeReceipt.key}.txt") }
+                            onSave = { saveNoteLauncher.launch("nota-${activeReceipt.key}.txt") },
+                            onMarkPaid = {
+                                scope.launch {
+                                    dao.markAsPaid(activeReceipt.key)
+                                    val updatedItems = activeReceipt.items.map { it.copy(isKasbon = false) }
+                                    receipt = activeReceipt.copy(items = updatedItems)
+                                    report("Nota berhasil ditandai LUNAS.")
+                                }
+                            }
                         )
                     }
                     formOpen -> {
@@ -285,6 +294,13 @@ private fun GeraiApp(activity: ComponentActivity, db: GeraiDatabase) {
                                             order.items.forEach { saleItem ->
                                                 dao.update(saleItem.copy(favorite = newFav))
                                             }
+                                        }
+                                    },
+                                    onMarkPaid = { orderToPay ->
+                                        scope.launch {
+                                            dao.markAsPaid(orderToPay.key)
+                                            val nameStr = if (orderToPay.customerName.isNotBlank()) " atas nama ${orderToPay.customerName}" else ""
+                                            report("Transaksi kasbon$nameStr berhasil ditandai LUNAS.")
                                         }
                                     }
                                 )

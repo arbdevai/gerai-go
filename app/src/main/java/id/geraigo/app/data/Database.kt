@@ -18,7 +18,10 @@ data class Sale(
     val taxAmount: Long = 0,
     val adminAmount: Long = 0,
     val taxPercent: Double = 0.0,
-    val adminPercent: Double = 0.0
+    val adminPercent: Double = 0.0,
+    val isKasbon: Boolean = false,
+    val customerName: String = "",
+    val paidCash: Long = 0L
 ) {
     val total: Long get() = price * quantity
 }
@@ -32,6 +35,10 @@ data class OrderReceipt(val key: String, val items: List<Sale>) {
     val total: Long get() = subtotal + taxAmount + adminAmount
     val createdAt: Long get() = items.minOfOrNull { it.createdAt } ?: 0L
     val note: String get() = items.firstOrNull { it.note.isNotBlank() }?.note.orEmpty()
+    val isKasbon: Boolean get() = items.any { it.isKasbon }
+    val customerName: String get() = items.firstOrNull { it.customerName.isNotBlank() }?.customerName.orEmpty()
+    val paidCash: Long get() = items.firstOrNull()?.paidCash ?: 0L
+    val changeAmount: Long get() = (paidCash - total).coerceAtLeast(0L)
 }
 
 @Entity(tableName = "store_settings")
@@ -75,6 +82,9 @@ interface SaleDao {
     @Query("DELETE FROM transactions WHERE receiptKey = :receiptKey")
     suspend fun deleteReceipt(receiptKey: String): Int
 
+    @Query("UPDATE transactions SET isKasbon = 0 WHERE receiptKey = :receiptKey")
+    suspend fun markAsPaid(receiptKey: String): Int
+
     @Transaction
     suspend fun replaceReceipt(receiptKey: String, sales: List<Sale>) {
         deleteReceipt(receiptKey)
@@ -103,7 +113,7 @@ interface StoreSettingsDao {
     suspend fun save(settings: StoreSettings)
 }
 
-@Database(entities = [Sale::class, StoreSettings::class], version = 3, exportSchema = false)
+@Database(entities = [Sale::class, StoreSettings::class], version = 4, exportSchema = false)
 abstract class GeraiDatabase : RoomDatabase() {
     abstract fun sales(): SaleDao
     abstract fun settings(): StoreSettingsDao
@@ -117,7 +127,7 @@ abstract class GeraiDatabase : RoomDatabase() {
                 context.applicationContext,
                 GeraiDatabase::class.java,
                 "gerai-go.db"
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
         }
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -140,6 +150,14 @@ abstract class GeraiDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE store_settings ADD COLUMN adminFeeEnabled INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE store_settings ADD COLUMN adminFeePercent REAL NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE store_settings ADD COLUMN printerAddress TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE transactions ADD COLUMN isKasbon INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE transactions ADD COLUMN customerName TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE transactions ADD COLUMN paidCash INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

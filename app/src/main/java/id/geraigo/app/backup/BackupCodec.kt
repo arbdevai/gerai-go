@@ -40,6 +40,9 @@ object BackupCodec {
                     .put("adminAmount", sale.adminAmount)
                     .put("taxPercent", sale.taxPercent)
                     .put("adminPercent", sale.adminPercent)
+                    .put("isKasbon", sale.isKasbon)
+                    .put("customerName", sale.customerName)
+                    .put("paidCash", sale.paidCash)
             )
         }
 
@@ -88,7 +91,7 @@ object BackupCodec {
 
         return JSONObject()
             .put("format", "gerai-go-backup")
-            .put("version", 3)
+            .put("version", 4)
             .put("createdAt", System.currentTimeMillis())
             .put("transactions", transactions)
             .put("settings", prefs)
@@ -117,7 +120,10 @@ object BackupCodec {
                 taxAmount = item.optLong("taxAmount"),
                 adminAmount = item.optLong("adminAmount"),
                 taxPercent = item.optDouble("taxPercent"),
-                adminPercent = item.optDouble("adminPercent")
+                adminPercent = item.optDouble("adminPercent"),
+                isKasbon = item.optBoolean("isKasbon"),
+                customerName = item.optString("customerName"),
+                paidCash = item.optLong("paidCash")
             )
         }
 

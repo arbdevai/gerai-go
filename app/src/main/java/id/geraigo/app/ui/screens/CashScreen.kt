@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.TrendingUp
@@ -36,6 +37,8 @@ fun CashScreen(
 ) {
     val now = System.currentTimeMillis()
     val today = orders.filter { sameDay(it.createdAt, now) }
+    val todayPaid = today.filter { !it.isKasbon }
+    val todayKasbon = today.filter { it.isKasbon }
 
     Column(
         Modifier
@@ -64,7 +67,7 @@ fun CashScreen(
                 ) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "TOTAL PEMASUKAN",
+                            "TOTAL PEMASUKAN TUNAI",
                             Modifier.weight(1f),
                             color = Color.White.copy(alpha = 0.8f),
                             fontSize = 11.sp,
@@ -75,26 +78,35 @@ fun CashScreen(
                     }
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        rupiah(today.sumOf { it.total }),
+                        rupiah(todayPaid.sumOf { it.total }),
                         color = Color.White,
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = (-0.5).sp
                     )
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(10.dp))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "${today.size} transaksi",
+                            "${todayPaid.size} lunas",
                             color = Color.White,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold
                         )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "·",
-                            color = Color.White.copy(alpha = 0.6f)
-                        )
-                        Spacer(Modifier.width(8.dp))
+                        if (todayKasbon.isNotEmpty()) {
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "·",
+                                color = Color.White.copy(alpha = 0.6f)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Kasbon: ${rupiah(todayKasbon.sumOf { it.total })} (${todayKasbon.size})",
+                                color = Color(0xFFFFD166),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        Spacer(Modifier.weight(1f))
                         Text(
                             dateLabel(now),
                             color = Color.White.copy(alpha = 0.75f),
@@ -166,13 +178,20 @@ fun SaleRow(order: OrderReceipt, onClick: () -> Unit, modifier: Modifier = Modif
                 Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(BrandPurple.copy(alpha = 0.1f)),
+                    .background(
+                        if (order.isKasbon) Color(0xFFE07A5F).copy(alpha = 0.15f)
+                        else BrandPurple.copy(alpha = 0.1f)
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    if (order.items.any { it.favorite }) Icons.Default.Star else Icons.Default.Receipt,
+                    when {
+                        order.isKasbon -> Icons.Default.MenuBook
+                        order.items.any { it.favorite } -> Icons.Default.Star
+                        else -> Icons.Default.Receipt
+                    },
                     contentDescription = null,
-                    tint = BrandPurple,
+                    tint = if (order.isKasbon) Color(0xFFE07A5F) else BrandPurple,
                     modifier = Modifier.size(19.dp)
                 )
             }
@@ -180,23 +199,44 @@ fun SaleRow(order: OrderReceipt, onClick: () -> Unit, modifier: Modifier = Modif
             Column(Modifier.weight(1f)) {
                 val firstName = order.items.firstOrNull()?.name.orEmpty().ifBlank { "Barang" }
                 val extraText = if (order.items.size > 1) " +${order.items.size - 1} barang" else ""
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        firstName + extraText,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (order.isKasbon) {
+                        Spacer(Modifier.width(6.dp))
+                        Surface(
+                            color = Color(0xFFE07A5F).copy(alpha = 0.18f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                "KASBON",
+                                color = Color(0xFFE07A5F),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                                letterSpacing = 0.6.sp
+                            )
+                        }
+                    }
+                }
+                val customerSub = if (order.customerName.isNotBlank()) " · ${order.customerName}" else ""
                 Text(
-                    firstName + extraText,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                    maxLines = 1
-                )
-                Text(
-                    "${order.items.size} item · ${dateTimeLabel(order.createdAt)}",
+                    "${order.items.size} item · ${dateTimeLabel(order.createdAt)}$customerSub",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp,
                     maxLines = 1
                 )
             }
+            Spacer(Modifier.width(8.dp))
             Text(
                 rupiah(order.total),
-                color = MaterialTheme.colorScheme.onSurface,
+                color = if (order.isKasbon) Color(0xFFE07A5F) else MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 13.sp
             )

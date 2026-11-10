@@ -42,7 +42,8 @@ fun ReceiptDialog(
     onPrint: () -> Unit,
     onShareText: () -> Unit,
     onShareImage: () -> Unit,
-    onSave: () -> Unit
+    onSave: () -> Unit,
+    onMarkPaid: (() -> Unit)? = null
 ) {
     Column(
         Modifier
@@ -123,6 +124,22 @@ fun ReceiptDialog(
         }
 
         Spacer(Modifier.height(8.dp))
+
+        if (sale.isKasbon && onMarkPaid != null) {
+            Button(
+                onClick = onMarkPaid,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Tandai Sudah Lunas", fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(8.dp))
+        }
 
         Button(
             onClick = onPrint,
@@ -209,6 +226,13 @@ fun buildReceiptText(receipt: OrderReceipt, settings: StoreSettings): String = b
     appendLine("NOTA PENJUALAN")
     appendLine("No. nota: GG-${receipt.key.takeLast(6).uppercase()}")
     appendLine(dateTimeLabel(receipt.createdAt))
+    if (receipt.isKasbon) {
+        appendLine("Status: KASBON (BELUM LUNAS)")
+        if (receipt.customerName.isNotBlank()) appendLine("Pelanggan: ${receipt.customerName}")
+    } else {
+        appendLine("Status: LUNAS (TUNAI)")
+        if (receipt.customerName.isNotBlank()) appendLine("Pelanggan: ${receipt.customerName}")
+    }
     appendLine("------------------------------")
     appendLine("BARANG (${receipt.items.size})")
     receipt.items.forEachIndexed { index, item ->
@@ -227,6 +251,12 @@ fun buildReceiptText(receipt: OrderReceipt, settings: StoreSettings): String = b
         appendLine("Biaya admin ${percent(receipt.adminPercent)}%: ${rupiah(receipt.adminAmount)}")
     }
     appendLine("TOTAL BAYAR: ${rupiah(receipt.total)}")
+    if (receipt.isKasbon) {
+        appendLine("*** BELUM DIBAYAR / KASBON ***")
+    } else if (receipt.paidCash > 0) {
+        appendLine("Bayar tunai: ${rupiah(receipt.paidCash)}")
+        appendLine("Kembalian: ${rupiah(receipt.changeAmount)}")
+    }
     appendLine("------------------------------")
     if (settings.footer.isNotBlank()) appendLine(settings.footer)
 }

@@ -29,9 +29,19 @@ fun HistoryScreen(
     onReceipt: (OrderReceipt) -> Unit,
     onEdit: (OrderReceipt) -> Unit,
     onDelete: (OrderReceipt) -> Unit,
-    onToggleFavorite: (OrderReceipt) -> Unit
+    onToggleFavorite: (OrderReceipt) -> Unit,
+    onMarkPaid: (OrderReceipt) -> Unit
 ) {
     var dateDialog by remember { mutableStateOf(false) }
+    var statusFilter by remember { mutableStateOf("ALL") } // "ALL", "PAID", "KASBON"
+
+    val displayedOrders = remember(orders, statusFilter) {
+        when (statusFilter) {
+            "PAID" -> orders.filter { !it.isKasbon }
+            "KASBON" -> orders.filter { it.isKasbon }
+            else -> orders
+        }
+    }
 
     Column(
         Modifier
@@ -44,7 +54,7 @@ fun HistoryScreen(
             value = query,
             onValueChange = onQuery,
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Cari nama barang atau catatan") },
+            placeholder = { Text("Cari nama barang, pelanggan, atau catatan") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             trailingIcon = {
                 if (query.isNotEmpty()) {
@@ -59,6 +69,33 @@ fun HistoryScreen(
 
         Spacer(Modifier.height(8.dp))
 
+        // Status filter chips
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FilterChip(
+                selected = statusFilter == "ALL",
+                onClick = { statusFilter = "ALL" },
+                label = { Text("Semua") }
+            )
+            FilterChip(
+                selected = statusFilter == "PAID",
+                onClick = { statusFilter = "PAID" },
+                label = { Text("Lunas") }
+            )
+            FilterChip(
+                selected = statusFilter == "KASBON",
+                onClick = { statusFilter = "KASBON" },
+                label = { Text("Kasbon") }
+            )
+            Spacer(Modifier.weight(1f))
+            Text("${displayedOrders.size}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+        }
+
+        Spacer(Modifier.height(4.dp))
+
         Row(verticalAlignment = Alignment.CenterVertically) {
             FilterChip(
                 selected = selectedDate == null,
@@ -72,20 +109,18 @@ fun HistoryScreen(
                 label = { Text(selectedDate?.let { dateLabel(it) } ?: "Pilih tanggal") },
                 leadingIcon = { Icon(Icons.Default.CalendarMonth, null, Modifier.size(16.dp)) }
             )
-            Spacer(Modifier.weight(1f))
-            Text("${orders.size}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         }
 
         Spacer(Modifier.height(8.dp))
 
-        if (orders.isEmpty()) {
-            EmptyState("Tidak ada transaksi ditemukan", "Ubah kata kunci pencarian atau tanggal filter.")
+        if (displayedOrders.isEmpty()) {
+            EmptyState("Tidak ada transaksi ditemukan", "Ubah kata kunci pencarian, status kasbon, atau tanggal filter.")
         } else {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(top = 4.dp, bottom = 90.dp)
             ) {
-                items(orders, key = { it.key }) { order ->
+                items(displayedOrders, key = { it.key }) { order ->
                     var menuOpen by remember(order.key) { mutableStateOf(false) }
 
                     Surface(
@@ -108,6 +143,13 @@ fun HistoryScreen(
                                     Icon(Icons.Default.MoreVert, "Aksi transaksi", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                    if (order.isKasbon) {
+                                        DropdownMenuItem(
+                                            text = { Text("Tandai Sudah Lunas", color = Color(0xFF16A34A), fontWeight = FontWeight.SemiBold) },
+                                            leadingIcon = { Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF16A34A)) },
+                                            onClick = { menuOpen = false; onMarkPaid(order) }
+                                        )
+                                    }
                                     DropdownMenuItem(
                                         text = { Text("Lihat nota") },
                                         leadingIcon = { Icon(Icons.Default.ReceiptLong, null) },
