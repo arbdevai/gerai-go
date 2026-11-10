@@ -37,6 +37,7 @@ import id.geraigo.app.updater.AppUpdateManager
 import id.geraigo.app.updater.UpdateUiState
 import kotlinx.coroutines.launch
 import java.io.File
+import java.util.Locale
 
 @Composable
 fun SettingsScreen(
@@ -384,8 +385,9 @@ fun SettingsScreen(
                         is UpdateUiState.Available -> {
                             Text("Versi ${state.versionName} tersedia untuk diunduh.", fontWeight = FontWeight.Medium, fontSize = 14.sp)
                             Spacer(Modifier.height(6.dp))
+                            val apkSizeMb = String.format(Locale.US, "%.1f", state.apkSize / (1024f * 1024f))
                             Text(
-                                "Ukuran: %.1f MB".format(state.apkSize / (1024f * 1024f)),
+                                "Ukuran: $apkSizeMb MB",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 12.sp
                             )
@@ -409,10 +411,10 @@ fun SettingsScreen(
                             )
                             Spacer(Modifier.height(6.dp))
                             val pct = (state.progress * 100).toInt()
-                            val downloadedMb = state.downloadedBytes / (1024f * 1024f)
-                            val totalMb = state.totalBytes / (1024f * 1024f)
+                            val downloadedMb = String.format(Locale.US, "%.1f", state.downloadedBytes / (1024f * 1024f))
+                            val totalMb = String.format(Locale.US, "%.1f", state.totalBytes / (1024f * 1024f))
                             Text(
-                                "$pct% (%.1f MB / %.1f MB)".format(downloadedMb, totalMb),
+                                "$pct% ($downloadedMb MB / $totalMb MB)",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

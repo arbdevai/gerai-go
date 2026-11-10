@@ -12,8 +12,8 @@ android {
         applicationId = "id.geraigo.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10300
-        versionName = "1.3.0"
+        versionCode = 10301
+        versionName = "1.3.1"
     }
     buildFeatures {
         compose = true

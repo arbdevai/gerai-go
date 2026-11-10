@@ -52,6 +52,8 @@
   - Tab Kas Hari Ini memisahkan total uang masuk riil di laci (Lunas) dengan piutang kasbon hari ini.
   - Dashboard menampilkan metrik khusus "Kasbon belum lunas" agar pedagang memantau seluruh uang yang belum dibayar pelanggan.
 
+- [x] **Perbaikan Crash In-App Update (v1.3.1):** Memperbaiki format string progress download pada `SettingsScreen.kt` yang sebelumnya memicu crash fatal `java.util.IllegalFormatFlagsException: Flags = ' ('` karena string interpolasi `$pct%` bentrok dengan parsing escape specifier `java.util.Formatter`. Diganti dengan format nilai terisolasi `String.format(Locale.US, "%.1f", ...)`.
+
 ### 4. Status Proyek Saat Ini
-- Versi: **1.3.0** (`versionCode 10300`).
+- Versi: **1.3.1** (`versionCode 10301`).
 - Siap build dan rilis via GitHub Actions CI.
