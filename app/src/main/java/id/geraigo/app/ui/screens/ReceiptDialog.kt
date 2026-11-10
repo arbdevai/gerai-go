@@ -15,9 +15,14 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -32,6 +37,8 @@ import id.geraigo.app.data.StoreSettings
 import id.geraigo.app.receipt.ReceiptRenderer
 import id.geraigo.app.ui.components.dateTimeLabel
 import id.geraigo.app.ui.components.rupiah
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 
 @Composable
@@ -160,13 +167,21 @@ fun ReceiptDialog(
 @Composable
 fun ReceiptBitmapPaper(receipt: OrderReceipt, settings: StoreSettings, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val bitmap = remember(receipt, settings) {
-        ReceiptRenderer.render(context, receipt, settings)
+    var bitmap by remember(receipt.key, settings) { mutableStateOf<Bitmap?>(null) }
+
+    LaunchedEffect(receipt, settings) {
+        val rendered = withContext(Dispatchers.Default) {
+            ReceiptRenderer.render(context, receipt, settings)
+        }
+        bitmap = rendered
     }
-    DisposableEffect(bitmap) {
+
+    DisposableEffect(receipt.key, settings) {
         onDispose {
-            if (!bitmap.isRecycled) {
-                bitmap.recycle()
+            bitmap?.let {
+                if (!it.isRecycled) {
+                    it.recycle()
+                }
             }
         }
     }
@@ -174,16 +189,35 @@ fun ReceiptBitmapPaper(receipt: OrderReceipt, settings: StoreSettings, modifier:
     val desiredWidth = if (settings.paperWidth == 80) 330.dp else 240.dp
     BoxWithConstraints(modifier, contentAlignment = Alignment.TopCenter) {
         val width = minOf(maxWidth, desiredWidth)
-        Image(
-            bitmap = bitmap.asImageBitmap(),
-            contentDescription = "Pratinjau struk thermal ${settings.paperWidth} mm",
-            contentScale = ContentScale.FillBounds,
-            modifier = Modifier
-                .width(width)
-                .aspectRatio((bitmap.width.toFloat() / bitmap.height.toFloat()).coerceAtLeast(0.1f))
-                .shadow(8.dp, RoundedCornerShape(2.dp))
-                .background(Color.White)
-        )
+        val currentBitmap = bitmap
+        if (currentBitmap != null && !currentBitmap.isRecycled) {
+            Image(
+                bitmap = currentBitmap.asImageBitmap(),
+                contentDescription = "Pratinjau struk thermal ${settings.paperWidth} mm",
+                contentScale = ContentScale.FillBounds,
+                modifier = Modifier
+                    .width(width)
+                    .aspectRatio((currentBitmap.width.toFloat() / currentBitmap.height.toFloat()).coerceAtLeast(0.1f))
+                    .shadow(8.dp, RoundedCornerShape(2.dp))
+                    .background(Color.White)
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .width(width)
+                    .height(260.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color.White)
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
     }
 }
 

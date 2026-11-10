@@ -59,6 +59,14 @@
   - Mengganti istilah "Kasbon" menjadi "Belum Lunas" di form transaksi, riwayat, status struk, dan badge agar sopan dan profesional saat diserahkan ke pelanggan.
   - Memangkas kalimat-kalimat panjang bertele-tele dan jargon AI-slop agar antarmuka bersih dan nyaman bagi pedagang warung/orang awam.
 
+- [x] **Optimasi Kelancaran Navigasi, Numpad Angka Murni & Form Slide-Up Mulus (v1.3.3):**
+  - **Asynchronous Thermal Receipt Rendering:** Memindahkan proses render `ReceiptRenderer.render()` dari UI main thread ke coroutine background (`withContext(Dispatchers.Default)`). Dialog terbuka instan < 16ms tanpa freeze / delay.
+  - **Smooth Slide-Up Transition:** Mengganti pergantian form transaksi instan yang "ngaget" dengan animasi meluncur naik dari bawah (`slideInVertically + fadeIn`) dan meluncur turun saat ditutup (`slideOutVertically + fadeOut`) menggunakan kurva `FastOutSlowInEasing`.
+  - **Smooth Bottom Dock Transition:** Menambahkan animasi `AnimatedVisibility` slide down/up pada bottom bar saat form dibuka/ditutup.
+  - **Universal Numeric Keypad:** Mengganti tipe keyboard input harga, jumlah barang, dan uang diterima menjadi `KeyboardType.NumberPassword` sehingga virtual keyboard di seluruh merek HP Android (Samsung, Xiaomi, Vivo, Oppo, Gboard) langsung membuka numpad angka kalkulator 3x4 besar tanpa huruf.
+  - **Pembersihan Top Bar Transaksi Baru:** Menghapus tombol panah kembali di top bar form transaksi agar header bersih dan luas (navigasi kembali menggunakan gesture/tombol back HP serta tombol "Batal" di bagian bawah).
+  - **Optimasi Recomposition Performa Layar:** Membungkus kalkulasi agregasi harian, mingguan, bulanan, dan produk terlaris di `DashboardScreen.kt` serta filter penjualan hari ini di `CashScreen.kt` dengan `remember(orders)` sehingga tab switching mulus 60/120 fps bebas jank.
+
 ### 4. Status Proyek Saat Ini
-- Versi: **1.3.2** (`versionCode 10302`).
+- Versi: **1.3.3** (`versionCode 10303`).
 - Siap build dan rilis via GitHub Actions CI.

@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,10 +36,10 @@ fun CashScreen(
     onFavorite: (String) -> Unit,
     onReceipt: (OrderReceipt) -> Unit
 ) {
-    val now = System.currentTimeMillis()
-    val today = orders.filter { sameDay(it.createdAt, now) }
-    val todayPaid = today.filter { !it.isKasbon }
-    val todayKasbon = today.filter { it.isKasbon }
+    val now = remember { System.currentTimeMillis() }
+    val today = remember(orders) { orders.filter { sameDay(it.createdAt, now) } }
+    val todayPaid = remember(today) { today.filter { !it.isKasbon } }
+    val todayKasbon = remember(today) { today.filter { it.isKasbon } }
 
     Column(
         Modifier

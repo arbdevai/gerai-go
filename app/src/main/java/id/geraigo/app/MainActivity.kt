@@ -11,6 +11,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -188,7 +189,11 @@ private fun GeraiApp(activity: ComponentActivity, db: GeraiDatabase) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            if (receipt == null && !formOpen) {
+            AnimatedVisibility(
+                visible = receipt == null && !formOpen,
+                enter = slideInVertically(tween(220, easing = FastOutSlowInEasing)) { height -> height } + fadeIn(tween(180)),
+                exit = slideOutVertically(tween(180, easing = FastOutSlowInEasing)) { height -> height } + fadeOut(tween(140))
+            ) {
                 FloatingNavDock(
                     selected = tab,
                     onSelected = { tab = it },
@@ -216,50 +221,19 @@ private fun GeraiApp(activity: ComponentActivity, db: GeraiDatabase) {
             }
 
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                when {
-                    receipt != null -> {
-                        val activeReceipt = receipt!!
-                        ReceiptDialog(
-                            sale = activeReceipt,
-                            settings = settings,
-                            onClose = { receipt = null },
-                            onPrint = { openPrinter(activeReceipt) },
-                            onShareText = { shareReceiptText(context, activeReceipt, settings) },
-                            onShareImage = { shareReceiptImage(context, activeReceipt, settings) },
-                            onSave = { saveNoteLauncher.launch("nota-${activeReceipt.key}.txt") },
-                            onMarkPaid = {
-                                scope.launch {
-                                    dao.markAsPaid(activeReceipt.key)
-                                    val updatedItems = activeReceipt.items.map { it.copy(isKasbon = false) }
-                                    receipt = activeReceipt.copy(items = updatedItems)
-                                    report("Status diubah jadi LUNAS.")
-                                }
-                            }
-                        )
-                    }
-                    formOpen -> {
-                        SaleFormDialog(
-                            dao = dao,
-                            initial = editingOrder,
-                            quickItem = quickItem,
-                            settings = settings,
-                            onClose = { formOpen = false },
-                            onSaved = { savedOrder ->
-                                receipt = savedOrder
-                                formOpen = false
-                                quickItem = null
-                            }
-                        )
-                    }
-                    else -> {
-                        AnimatedContent(
-                            targetState = tab,
-                            transitionSpec = {
-                                (fadeIn(tween(180)) + slideInHorizontally(tween(180)) { slideDistance -> slideDistance / 32 }) togetherWith
-                                    (fadeOut(tween(130)) + slideOutHorizontally(tween(130)) { slideDistance -> -slideDistance / 32 })
-                            },
-                            label = "tab-navigation"
-                        ) { currentTab ->
+                AnimatedContent(
+                    targetState = tab,
+                    transitionSpec = {
+                        if (targetState > initialState) {
+                            (slideInHorizontally(tween(240, easing = FastOutSlowInEasing)) { width -> width / 4 } + fadeIn(tween(220))) togetherWith
+                                (slideOutHorizontally(tween(190, easing = FastOutSlowInEasing)) { width -> -width / 4 } + fadeOut(tween(160)))
+                        } else {
+                            (slideInHorizontally(tween(240, easing = FastOutSlowInEasing)) { width -> -width / 4 } + fadeIn(tween(220))) togetherWith
+                                (slideOutHorizontally(tween(190, easing = FastOutSlowInEasing)) { width -> width / 4 } + fadeOut(tween(160)))
+                        }
+                    },
+                    label = "tab-navigation"
+                ) { currentTab ->
                             when (currentTab) {
                                 0 -> CashScreen(
                                     orders = orders,
@@ -357,6 +331,49 @@ private fun GeraiApp(activity: ComponentActivity, db: GeraiDatabase) {
                                 )
                             }
                         }
+
+                AnimatedVisibility(
+                    visible = formOpen,
+                    enter = slideInVertically(tween(260, easing = FastOutSlowInEasing)) { height -> height / 4 } + fadeIn(tween(220)),
+                    exit = slideOutVertically(tween(200, easing = FastOutSlowInEasing)) { height -> height / 4 } + fadeOut(tween(180))
+                ) {
+                    SaleFormDialog(
+                        dao = dao,
+                        initial = editingOrder,
+                        quickItem = quickItem,
+                        settings = settings,
+                        onClose = { formOpen = false },
+                        onSaved = { savedOrder ->
+                            receipt = savedOrder
+                            formOpen = false
+                            quickItem = null
+                        }
+                    )
+                }
+
+                AnimatedVisibility(
+                    visible = receipt != null,
+                    enter = fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.95f),
+                    exit = fadeOut(tween(160)) + scaleOut(tween(160), targetScale = 0.95f)
+                ) {
+                    receipt?.let { activeReceipt ->
+                        ReceiptDialog(
+                            sale = activeReceipt,
+                            settings = settings,
+                            onClose = { receipt = null },
+                            onPrint = { openPrinter(activeReceipt) },
+                            onShareText = { shareReceiptText(context, activeReceipt, settings) },
+                            onShareImage = { shareReceiptImage(context, activeReceipt, settings) },
+                            onSave = { saveNoteLauncher.launch("nota-${activeReceipt.key}.txt") },
+                            onMarkPaid = {
+                                scope.launch {
+                                    dao.markAsPaid(activeReceipt.key)
+                                    val updatedItems = activeReceipt.items.map { it.copy(isKasbon = false) }
+                                    receipt = activeReceipt.copy(items = updatedItems)
+                                    report("Status diubah jadi LUNAS.")
+                                }
+                            }
+                        )
                     }
                 }
             }

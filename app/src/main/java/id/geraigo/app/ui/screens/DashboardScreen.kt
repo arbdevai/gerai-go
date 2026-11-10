@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,28 +34,34 @@ private val ChartColors = listOf(
 
 @Composable
 fun DashboardScreen(orders: List<OrderReceipt>) {
-    val now = System.currentTimeMillis()
-    val today = orders.filter { sameDay(it.createdAt, now) }
-    val week = orders.filter { it.createdAt >= now - 7L * 86_400_000L }
-    val month = orders.filter { monthKey(it.createdAt) == monthKey(now) }
+    val now = remember { System.currentTimeMillis() }
+    val today = remember(orders) { orders.filter { sameDay(it.createdAt, now) } }
+    val week = remember(orders) { orders.filter { it.createdAt >= now - 7L * 86_400_000L } }
+    val month = remember(orders) { orders.filter { monthKey(it.createdAt) == monthKey(now) } }
 
-    val daily = (6 downTo 0).map { delta ->
-        val day = now - delta * 86_400_000L
-        orders.filter { sameDay(it.createdAt, day) }.sumOf { it.total }
+    val daily = remember(orders) {
+        (6 downTo 0).map { delta ->
+            val day = now - delta * 86_400_000L
+            orders.filter { sameDay(it.createdAt, day) }.sumOf { it.total }
+        }
     }
 
-    val weeks = (3 downTo 0).map { offset ->
-        val start = startOfDay(now) - (offset * 7L + 6L) * 86_400_000L
-        orders.filter { it.createdAt in start until (start + 7L * 86_400_000L) }.sumOf { it.total }
+    val weeks = remember(orders) {
+        (3 downTo 0).map { offset ->
+            val start = startOfDay(now) - (offset * 7L + 6L) * 86_400_000L
+            orders.filter { it.createdAt in start until (start + 7L * 86_400_000L) }.sumOf { it.total }
+        }
     }
 
-    val products = orders
-        .flatMap { it.items }
-        .groupBy { it.name }
-        .mapValues { it.value.sumOf(Sale::total) }
-        .entries
-        .sortedByDescending { it.value }
-        .take(6)
+    val products = remember(orders) {
+        orders
+            .flatMap { it.items }
+            .groupBy { it.name }
+            .mapValues { it.value.sumOf(Sale::total) }
+            .entries
+            .sortedByDescending { it.value }
+            .take(6)
+    }
 
     Column(
         Modifier
@@ -64,8 +71,8 @@ fun DashboardScreen(orders: List<OrderReceipt>) {
     ) {
         ScreenHeader("Laporan", "Ringkasan penjualan toko")
 
-        val activeKasbon = orders.filter { it.isKasbon }
-        val activeKasbonTotal = activeKasbon.sumOf { it.total }
+        val activeKasbon = remember(orders) { orders.filter { it.isKasbon } }
+        val activeKasbonTotal = remember(activeKasbon) { activeKasbon.sumOf { it.total } }
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             MetricCard("Penjualan hari ini", rupiah(today.filter { !it.isKasbon }.sumOf { it.total }), Modifier.weight(1f))

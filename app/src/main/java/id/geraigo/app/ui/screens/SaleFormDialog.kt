@@ -145,26 +145,22 @@ fun SaleFormDialog(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 18.dp, vertical = 14.dp)
     ) {
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
         ) {
-            IconButton(onClick = onClose) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Kembali")
-            }
-            Column(Modifier.weight(1f).padding(start = 4.dp)) {
-                Text(
-                    if (initial == null) "Transaksi baru" else "Edit transaksi",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Text(
-                    "Ketik nama barang lalu tekan Enter",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp
-                )
-            }
+            Text(
+                if (initial == null) "Transaksi baru" else "Edit transaksi",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Text(
+                "Ketik nama barang lalu tekan Enter",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp
+            )
         }
 
         Spacer(Modifier.height(8.dp))
@@ -272,7 +268,7 @@ fun SaleFormDialog(
                                 .focusRequester(priceFocusRequesters.getOrElse(index) { FocusRequester() }),
                             label = { Text("Harga · Rp") },
                             keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Number,
+                                keyboardType = KeyboardType.NumberPassword,
                                 imeAction = ImeAction.Next
                             ),
                             keyboardActions = KeyboardActions(
@@ -296,7 +292,7 @@ fun SaleFormDialog(
                                 .focusRequester(qtyFocusRequesters.getOrElse(index) { FocusRequester() }),
                             label = { Text("Jumlah") },
                             keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Number,
+                                keyboardType = KeyboardType.NumberPassword,
                                 imeAction = if (index == items.lastIndex) ImeAction.Done else ImeAction.Next
                             ),
                             keyboardActions = KeyboardActions(
@@ -441,7 +437,10 @@ fun SaleFormDialog(
                         label = { Text("Nominal Diterima (Rp)") },
                         placeholder = { Text("0") },
                         visualTransformation = RupiahInputTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.NumberPassword,
+                            imeAction = ImeAction.Done
+                        ),
                         shape = RoundedCornerShape(12.dp),
                         singleLine = true
                     )
@@ -566,60 +565,75 @@ fun SaleFormDialog(
 
         Spacer(Modifier.height(14.dp))
 
-        Button(
-            onClick = {
-                formError = when {
-                    items.isEmpty() -> "Pilih atau isi minimal 1 barang."
-                    items.any { it.name.isBlank() } -> "Nama barang tidak boleh kosong."
-                    items.any { (it.price.toLongOrNull() ?: 0L) <= 0L } -> "Harga barang tidak boleh Rp 0."
-                    items.any { (it.quantity.toIntOrNull() ?: 0) <= 0 } -> "Jumlah barang minimal 1."
-                    isKasbon && customerName.isBlank() -> "Nama pelanggan wajib diisi jika belum lunas."
-                    else -> ""
-                }
-                if (formError.isBlank()) {
-                    val key = receiptKey
-                    val createdAt = previewCreatedAt
-                    val finalPaidCash = if (isKasbon) 0L else paidCashAmount
-                    val rows = items.mapIndexed { idx, draft ->
-                        Sale(
-                            name = draft.name.trim(),
-                            price = draft.price.toLong(),
-                            quantity = draft.quantity.toInt(),
-                            note = if (idx == 0) note.trim() else "",
-                            createdAt = createdAt,
-                            favorite = draft.favorite,
-                            receiptKey = key,
-                            taxAmount = if (idx == 0) tax else 0L,
-                            adminAmount = if (idx == 0) admin else 0L,
-                            taxPercent = if (idx == 0 && appliedSettings.taxEnabled) appliedSettings.taxPercent else 0.0,
-                            adminPercent = if (idx == 0 && appliedSettings.adminFeeEnabled) appliedSettings.adminFeePercent else 0.0,
-                            isKasbon = isKasbon,
-                            customerName = if (idx == 0) customerName.trim() else "",
-                            paidCash = if (idx == 0) finalPaidCash else 0L
-                        )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(
+                onClick = onClose,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(50.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Text("Batal")
+            }
+            Button(
+                onClick = {
+                    formError = when {
+                        items.isEmpty() -> "Pilih atau isi minimal 1 barang."
+                        items.any { it.name.isBlank() } -> "Nama barang tidak boleh kosong."
+                        items.any { (it.price.toLongOrNull() ?: 0L) <= 0L } -> "Harga barang tidak boleh Rp 0."
+                        items.any { (it.quantity.toIntOrNull() ?: 0) <= 0 } -> "Jumlah barang minimal 1."
+                        isKasbon && customerName.isBlank() -> "Nama pelanggan wajib diisi jika belum lunas."
+                        else -> ""
                     }
+                    if (formError.isBlank()) {
+                        val key = receiptKey
+                        val createdAt = previewCreatedAt
+                        val finalPaidCash = if (isKasbon) 0L else paidCashAmount
+                        val rows = items.mapIndexed { idx, draft ->
+                            Sale(
+                                name = draft.name.trim(),
+                                price = draft.price.toLong(),
+                                quantity = draft.quantity.toInt(),
+                                note = if (idx == 0) note.trim() else "",
+                                createdAt = createdAt,
+                                favorite = draft.favorite,
+                                receiptKey = key,
+                                taxAmount = if (idx == 0) tax else 0L,
+                                adminAmount = if (idx == 0) admin else 0L,
+                                taxPercent = if (idx == 0 && appliedSettings.taxEnabled) appliedSettings.taxPercent else 0.0,
+                                adminPercent = if (idx == 0 && appliedSettings.adminFeeEnabled) appliedSettings.adminFeePercent else 0.0,
+                                isKasbon = isKasbon,
+                                customerName = if (idx == 0) customerName.trim() else "",
+                                paidCash = if (idx == 0) finalPaidCash else 0L
+                            )
+                        }
 
-                    scope.launch {
-                        runCatching {
-                            if (initial == null) {
-                                dao.insertAll(rows)
-                            } else {
-                                dao.replaceReceipt(key, rows)
+                        scope.launch {
+                            runCatching {
+                                if (initial == null) {
+                                    dao.insertAll(rows)
+                                } else {
+                                    dao.replaceReceipt(key, rows)
+                                }
+                            }.onSuccess {
+                                onSaved(OrderReceipt(key, rows))
+                            }.onFailure {
+                                formError = "Gagal menyimpan transaksi."
                             }
-                        }.onSuccess {
-                            onSaved(OrderReceipt(key, rows))
-                        }.onFailure {
-                            formError = "Gagal menyimpan transaksi."
                         }
                     }
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Text(if (initial == null) "Simpan & Lihat Struk" else "Simpan Perubahan", fontWeight = FontWeight.SemiBold)
+                },
+                modifier = Modifier
+                    .weight(2f)
+                    .height(50.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Text(if (initial == null) "Simpan & Lihat Struk" else "Simpan Perubahan", fontWeight = FontWeight.SemiBold)
+            }
         }
 
         Spacer(Modifier.height(30.dp))
