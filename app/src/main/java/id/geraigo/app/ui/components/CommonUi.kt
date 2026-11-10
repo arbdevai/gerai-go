@@ -100,7 +100,7 @@ fun FloatingNavDock(
     onSelected: (Int) -> Unit,
     onAdd: () -> Unit
 ) {
-    val labels = listOf("Kas", "Riwayat", "Dashboard", "Pengaturan")
+    val labels = listOf("Penjualan", "Riwayat", "Laporan", "Pengaturan")
     val icons = listOf(
         Icons.Default.AddCard,
         Icons.Default.ReceiptLong,

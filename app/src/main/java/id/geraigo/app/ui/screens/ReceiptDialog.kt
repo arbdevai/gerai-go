@@ -60,13 +60,13 @@ fun ReceiptDialog(
             }
             Column(Modifier.weight(1f).padding(start = 4.dp)) {
                 Text(
-                    "Nota Tersimpan",
+                    "Struk Belanja",
                     color = MaterialTheme.colorScheme.onBackground,
                     fontWeight = FontWeight.Bold,
                     fontSize = 20.sp
                 )
                 Text(
-                    "Pratinjau cetak struk ${settings.paperWidth} mm",
+                    "Kertas ${settings.paperWidth} mm",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
                 )
@@ -136,7 +136,7 @@ fun ReceiptDialog(
             ) {
                 Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Tandai Sudah Lunas", fontWeight = FontWeight.SemiBold)
+                Text("Tandai Lunas", fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(8.dp))
         }
@@ -150,7 +150,7 @@ fun ReceiptDialog(
         ) {
             Icon(Icons.Default.Print, null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Cetak ke printer Bluetooth")
+            Text("Cetak Struk")
         }
 
         Spacer(Modifier.height(12.dp))
@@ -224,13 +224,13 @@ fun buildReceiptText(receipt: OrderReceipt, settings: StoreSettings): String = b
     if (settings.header.isNotBlank()) appendLine(settings.header)
     appendLine("------------------------------")
     appendLine("NOTA PENJUALAN")
-    appendLine("No. nota: GG-${receipt.key.takeLast(6).uppercase()}")
+    appendLine("No. struk: GG-${receipt.key.takeLast(6).uppercase()}")
     appendLine(dateTimeLabel(receipt.createdAt))
     if (receipt.isKasbon) {
-        appendLine("Status: KASBON (BELUM LUNAS)")
+        appendLine("Status: BELUM LUNAS")
         if (receipt.customerName.isNotBlank()) appendLine("Pelanggan: ${receipt.customerName}")
     } else {
-        appendLine("Status: LUNAS (TUNAI)")
+        appendLine("Status: LUNAS")
         if (receipt.customerName.isNotBlank()) appendLine("Pelanggan: ${receipt.customerName}")
     }
     appendLine("------------------------------")
@@ -242,7 +242,7 @@ fun buildReceiptText(receipt: OrderReceipt, settings: StoreSettings): String = b
     if (receipt.note.isNotBlank()) appendLine("Catatan: ${receipt.note}")
     appendLine("------------------------------")
     appendLine("Ringkasan")
-    appendLine("Total kuantitas: ${receipt.items.sumOf { it.quantity }} pcs")
+    appendLine("Total barang: ${receipt.items.sumOf { it.quantity }} item")
     appendLine("Subtotal: ${rupiah(receipt.subtotal)}")
     if (receipt.taxPercent > 0.0 || receipt.taxAmount > 0) {
         appendLine("Pajak ${percent(receipt.taxPercent)}%: ${rupiah(receipt.taxAmount)}")
@@ -250,11 +250,11 @@ fun buildReceiptText(receipt: OrderReceipt, settings: StoreSettings): String = b
     if (receipt.adminPercent > 0.0 || receipt.adminAmount > 0) {
         appendLine("Biaya admin ${percent(receipt.adminPercent)}%: ${rupiah(receipt.adminAmount)}")
     }
-    appendLine("TOTAL BAYAR: ${rupiah(receipt.total)}")
+    appendLine("TOTAL: ${rupiah(receipt.total)}")
     if (receipt.isKasbon) {
-        appendLine("*** BELUM DIBAYAR / KASBON ***")
+        appendLine("*** BELUM LUNAS ***")
     } else if (receipt.paidCash > 0) {
-        appendLine("Bayar tunai: ${rupiah(receipt.paidCash)}")
+        appendLine("Tunai: ${rupiah(receipt.paidCash)}")
         appendLine("Kembalian: ${rupiah(receipt.changeAmount)}")
     }
     appendLine("------------------------------")

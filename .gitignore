@@ -9,4 +9,5 @@ dist/
 /scripts/
 __pycache__/
 *.pyc
+preview/
 

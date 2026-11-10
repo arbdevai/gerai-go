@@ -53,7 +53,12 @@
   - Dashboard menampilkan metrik khusus "Kasbon belum lunas" agar pedagang memantau seluruh uang yang belum dibayar pelanggan.
 
 - [x] **Perbaikan Crash In-App Update (v1.3.1):** Memperbaiki format string progress download pada `SettingsScreen.kt` yang sebelumnya memicu crash fatal `java.util.IllegalFormatFlagsException: Flags = ' ('` karena string interpolasi `$pct%` bentrok dengan parsing escape specifier `java.util.Formatter`. Diganti dengan format nilai terisolasi `String.format(Locale.US, "%.1f", ...)`.
+- [x] **Optimasi Layout Struk 2 Baris & Penyegaran Copywriting (v1.3.2):**
+  - Mengubah layout `TOTAL` di `ReceiptRenderer.kt` menjadi 2 baris (Baris 1: `TOTAL`, Baris 2: right-aligned `Rp X.XXX.XXX` besar). Menghilangkan tabrakan teks saat nominal mencapai jutaan pada kertas 58 mm.
+  - Mengganti istilah "Kas" menjadi "Penjualan" / "Kasir" di seluruh aplikasi agar citra aplikasi fokus pada kasir dan penjualan, bukan buku pencatat kas.
+  - Mengganti istilah "Kasbon" menjadi "Belum Lunas" di form transaksi, riwayat, status struk, dan badge agar sopan dan profesional saat diserahkan ke pelanggan.
+  - Memangkas kalimat-kalimat panjang bertele-tele dan jargon AI-slop agar antarmuka bersih dan nyaman bagi pedagang warung/orang awam.
 
 ### 4. Status Proyek Saat Ini
-- Versi: **1.3.1** (`versionCode 10301`).
+- Versi: **1.3.2** (`versionCode 10302`).
 - Siap build dan rilis via GitHub Actions CI.

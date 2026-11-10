@@ -126,7 +126,7 @@ private fun GeraiApp(activity: ComponentActivity, db: GeraiDatabase) {
         if (granted) {
             showPrinters = true
         } else {
-            report("Izin Bluetooth ditolak. Aktifkan izin Bluetooth di Pengaturan Android.", true)
+            report("Izin Bluetooth belum aktif.", true)
         }
     }
 
@@ -140,9 +140,9 @@ private fun GeraiApp(activity: ComponentActivity, db: GeraiDatabase) {
                     out.write(buildReceiptText(currentReceipt, settings).toByteArray())
                 } ?: error("Lokasi file tidak dapat dibuka")
             }.onSuccess {
-                report("Nota berhasil disimpan ke berkas teks.")
+                report("Nota disimpan ke file teks.")
             }.onFailure {
-                report("Nota gagal disimpan. Coba lagi.", true)
+                report("Gagal menyimpan nota.", true)
             }
         }
     }
@@ -175,9 +175,9 @@ private fun GeraiApp(activity: ComponentActivity, db: GeraiDatabase) {
                 runCatching {
                     ThermalPrinter.print(context, settings.printerAddress, saleToPrint, settings)
                 }.onSuccess {
-                    report("Nota berhasil dicetak.")
+                    report("Struk berhasil dicetak.")
                 }.onFailure {
-                    report("Cetak gagal. Periksa koneksi printer atau pilih printer lain.", true)
+                    report("Gagal mencetak. Cek koneksi printer.", true)
                 }
             }
         } else {
@@ -232,7 +232,7 @@ private fun GeraiApp(activity: ComponentActivity, db: GeraiDatabase) {
                                     dao.markAsPaid(activeReceipt.key)
                                     val updatedItems = activeReceipt.items.map { it.copy(isKasbon = false) }
                                     receipt = activeReceipt.copy(items = updatedItems)
-                                    report("Nota berhasil ditandai LUNAS.")
+                                    report("Status diubah jadi LUNAS.")
                                 }
                             }
                         )
@@ -300,7 +300,7 @@ private fun GeraiApp(activity: ComponentActivity, db: GeraiDatabase) {
                                         scope.launch {
                                             dao.markAsPaid(orderToPay.key)
                                             val nameStr = if (orderToPay.customerName.isNotBlank()) " atas nama ${orderToPay.customerName}" else ""
-                                            report("Transaksi kasbon$nameStr berhasil ditandai LUNAS.")
+                                            report("Tagihan$nameStr sudah LUNAS.")
                                         }
                                     }
                                 )
@@ -316,9 +316,9 @@ private fun GeraiApp(activity: ComponentActivity, db: GeraiDatabase) {
                                             runCatching {
                                                 settingsDao.save(updatedSettings)
                                             }.onSuccess {
-                                                report("Pengaturan berhasil disimpan.")
+                                                report("Pengaturan disimpan.")
                                             }.onFailure {
-                                                report("Pengaturan gagal disimpan.", true)
+                                                report("Gagal menyimpan pengaturan.", true)
                                             }
                                         }
                                     },
@@ -348,9 +348,9 @@ private fun GeraiApp(activity: ComponentActivity, db: GeraiDatabase) {
                                                     }
                                                 }
                                             }.onSuccess {
-                                                report("Data berhasil dipulihkan dari backup.")
+                                                report("Data berhasil dipulihkan.")
                                             }.onFailure {
-                                                report("Data gagal dipulihkan. Pastikan format berkas benar.", true)
+                                                report("Gagal memulihkan data. Format file salah.", true)
                                             }
                                         }
                                     }
@@ -367,10 +367,10 @@ private fun GeraiApp(activity: ComponentActivity, db: GeraiDatabase) {
         val target = deleteTarget!!
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text("Hapus transaksi?", fontSize = 17.sp) },
+            title = { Text("Hapus Transaksi?", fontSize = 17.sp) },
             text = {
                 Text(
-                    "${target.items.size} barang dalam nota ini akan dihapus permanen.",
+                    "Nota ini akan dihapus permanen.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp
                 )
@@ -415,9 +415,9 @@ private fun GeraiApp(activity: ComponentActivity, db: GeraiDatabase) {
                             ThermalPrinter.print(context, selectedAddress, currentSale, settings)
                             settingsDao.save(settings.copy(printerAddress = selectedAddress))
                         }.onSuccess {
-                            report("Nota berhasil dicetak dan printer disimpan.")
+                            report("Struk berhasil dicetak dan printer disimpan.")
                         }.onFailure {
-                            report("Nota gagal dicetak. Pastikan printer menyala dan kertas tersedia.", true)
+                            report("Gagal cetak. Pastikan printer nyala & kertas ada.", true)
                         }
                     }
                 }

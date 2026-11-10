@@ -30,7 +30,7 @@ fun PrinterDialog(
         text = {
             Column {
                 Text(
-                    "Pastikan printer ESC/POS (58/80 mm) sudah dipasangkan di Pengaturan Bluetooth Android.",
+                    "Pastikan printer sudah terhubung di Bluetooth HP Anda.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
                 )
@@ -38,7 +38,7 @@ fun PrinterDialog(
 
                 if (devices.isEmpty()) {
                     Text(
-                        "Belum ada perangkat printer tersanding yang ditemukan.",
+                        "Belum ada printer Bluetooth yang terhubung.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(vertical = 8.dp)

@@ -160,7 +160,7 @@ fun SaleFormDialog(
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    "Ketik barang, tekan Enter untuk langsung mengisi harga & jumlah",
+                    "Ketik nama barang lalu tekan Enter",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
                 )
@@ -370,7 +370,7 @@ fun SaleFormDialog(
         ) {
             Column(Modifier.padding(14.dp)) {
                 Text(
-                    "Metode & Status Pembayaran",
+                    "Status Bayar",
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 14.sp
@@ -383,14 +383,14 @@ fun SaleFormDialog(
                     FilterChip(
                         selected = !isKasbon,
                         onClick = { isKasbon = false },
-                        label = { Text("Lunas (Tunai)") },
+                        label = { Text("Lunas") },
                         leadingIcon = { Icon(Icons.Default.Payments, null, Modifier.size(16.dp)) },
                         modifier = Modifier.weight(1f)
                     )
                     FilterChip(
                         selected = isKasbon,
                         onClick = { isKasbon = true },
-                        label = { Text("Kasbon (Belum Lunas)") },
+                        label = { Text("Belum Lunas") },
                         leadingIcon = { Icon(Icons.Default.MenuBook, null, Modifier.size(16.dp)) },
                         modifier = Modifier.weight(1f)
                     )
@@ -402,22 +402,16 @@ fun SaleFormDialog(
                         value = customerName,
                         onValueChange = { customerName = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Nama / Panggilan Pembeli *") },
-                        placeholder = { Text("Contoh: Pak RT, Mbak Sari, Mas Budi") },
+                        label = { Text("Nama Pelanggan *") },
+                        placeholder = { Text("Misal: Pak RT, Mas Budi, Bu Siti") },
                         leadingIcon = { Icon(Icons.Default.Person, null, Modifier.size(18.dp)) },
                         shape = RoundedCornerShape(12.dp),
                         singleLine = true
                     )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "Disimpan di Lipatan Buku Kasbon digital agar tidak lupa.",
-                        color = Color(0xFFE07A5F),
-                        fontSize = 11.sp
-                    )
                 } else {
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        "Uang Tunai Diterima",
+                        "Uang Diterima",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp
                     )
@@ -444,7 +438,7 @@ fun SaleFormDialog(
                             paidCashText = input.filter(Char::isDigit).take(12)
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Uang Diterima · Rp") },
+                        label = { Text("Nominal Diterima (Rp)") },
                         placeholder = { Text("0") },
                         visualTransformation = RupiahInputTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -490,7 +484,7 @@ fun SaleFormDialog(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        "Uang Masih Kurang:",
+                                        "Kurang:",
                                         color = Color(0xFFE07A5F),
                                         fontWeight = FontWeight.SemiBold,
                                         fontSize = 12.sp
@@ -559,7 +553,7 @@ fun SaleFormDialog(
                 HorizontalDivider(Modifier.padding(vertical = 6.dp))
                 ReceiptDataRow("TOTAL", rupiah(totalAmount), bold = true, size = 15.sp)
                 if (isKasbon) {
-                    ReceiptDataRow("Status", "KASBON (BELUM LUNAS)", bold = true, size = 12.sp)
+                    ReceiptDataRow("Status", "BELUM LUNAS", bold = true, size = 12.sp)
                     if (customerName.isNotBlank()) {
                         ReceiptDataRow("Pelanggan", customerName.trim(), bold = true, size = 12.sp)
                     }
@@ -575,11 +569,11 @@ fun SaleFormDialog(
         Button(
             onClick = {
                 formError = when {
-                    items.isEmpty() -> "Tambahkan minimal satu barang."
-                    items.any { it.name.isBlank() } -> "Nama setiap barang wajib diisi."
-                    items.any { (it.price.toLongOrNull() ?: 0L) <= 0L } -> "Harga barang harus lebih dari Rp 0."
+                    items.isEmpty() -> "Pilih atau isi minimal 1 barang."
+                    items.any { it.name.isBlank() } -> "Nama barang tidak boleh kosong."
+                    items.any { (it.price.toLongOrNull() ?: 0L) <= 0L } -> "Harga barang tidak boleh Rp 0."
                     items.any { (it.quantity.toIntOrNull() ?: 0) <= 0 } -> "Jumlah barang minimal 1."
-                    isKasbon && customerName.isBlank() -> "Nama pembeli wajib diisi untuk transaksi kasbon."
+                    isKasbon && customerName.isBlank() -> "Nama pelanggan wajib diisi jika belum lunas."
                     else -> ""
                 }
                 if (formError.isBlank()) {
@@ -615,7 +609,7 @@ fun SaleFormDialog(
                         }.onSuccess {
                             onSaved(OrderReceipt(key, rows))
                         }.onFailure {
-                            formError = "Gagal menyimpan transaksi. Coba lagi."
+                            formError = "Gagal menyimpan transaksi."
                         }
                     }
                 }
@@ -625,7 +619,7 @@ fun SaleFormDialog(
                 .height(50.dp),
             shape = RoundedCornerShape(14.dp)
         ) {
-            Text(if (initial == null) "Simpan dan lihat nota" else "Simpan perubahan", fontWeight = FontWeight.SemiBold)
+            Text(if (initial == null) "Simpan & Lihat Struk" else "Simpan Perubahan", fontWeight = FontWeight.SemiBold)
         }
 
         Spacer(Modifier.height(30.dp))
@@ -665,9 +659,9 @@ private fun LiveThermalPreview(
     val sale = remember(rows, createdAt, receiptKey) { OrderReceipt(receiptKey, rows) }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Pratinjau nota langsung", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            Text("Pratinjau Struk", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
             Spacer(Modifier.weight(1f))
-            Text("THERMAL ${settings.paperWidth} mm", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, letterSpacing = 0.7.sp)
+            Text("KERTAS ${settings.paperWidth} mm", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, letterSpacing = 0.7.sp)
         }
         ReceiptBitmapPaper(sale, settings, Modifier.fillMaxWidth())
     }

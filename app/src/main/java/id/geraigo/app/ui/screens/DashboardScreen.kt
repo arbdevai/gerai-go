@@ -62,20 +62,20 @@ fun DashboardScreen(orders: List<OrderReceipt>) {
             .padding(horizontal = 18.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        ScreenHeader("Dashboard", "Ringkasan metrik keuangan dan penjualan")
+        ScreenHeader("Laporan", "Ringkasan penjualan toko")
 
         val activeKasbon = orders.filter { it.isKasbon }
         val activeKasbonTotal = activeKasbon.sumOf { it.total }
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MetricCard("Kas masuk hari ini", rupiah(today.filter { !it.isKasbon }.sumOf { it.total }), Modifier.weight(1f))
+            MetricCard("Penjualan hari ini", rupiah(today.filter { !it.isKasbon }.sumOf { it.total }), Modifier.weight(1f))
             MetricCard("Transaksi hari ini", "${today.size}", Modifier.weight(1f))
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             val avgToday = if (today.isEmpty()) 0L else today.sumOf { it.total } / today.size
             MetricCard("Rata-rata transaksi", rupiah(avgToday), Modifier.weight(1f))
-            MetricCard("Kasbon belum lunas", rupiah(activeKasbonTotal), Modifier.weight(1f))
+            MetricCard("Total belum lunas", rupiah(activeKasbonTotal), Modifier.weight(1f))
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -84,17 +84,17 @@ fun DashboardScreen(orders: List<OrderReceipt>) {
         }
 
         Spacer(Modifier.height(18.dp))
-        ChartSection("Pemasukan harian · 7 hari") {
+        ChartSection("Penjualan 7 hari") {
             LineChart(daily)
         }
 
         Spacer(Modifier.height(14.dp))
-        ChartSection("Perbandingan pemasukan mingguan") {
+        ChartSection("Penjualan mingguan") {
             BarChart(weeks)
         }
 
         Spacer(Modifier.height(14.dp))
-        ChartSection("Persentase penjualan per item") {
+        ChartSection("Barang terlaris") {
             val totalProductsValue = products.sumOf { it.value }
             if (products.isEmpty() || totalProductsValue <= 0) {
                 Text(

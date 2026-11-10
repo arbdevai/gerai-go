@@ -101,26 +101,26 @@ object ReceiptRenderer {
         }
 
         rows += Row(rule = true, spaceBefore = 8)
-        paired("No. nota", "GG-${receipt.key.takeLast(6).uppercase()}")
+        paired("No. struk", "GG-${receipt.key.takeLast(6).uppercase()}")
         val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale("id", "ID"))
         val timeFormat = SimpleDateFormat("HH:mm", Locale("id", "ID"))
         val receiptDate = Date(receipt.createdAt)
         paired("Tanggal", dateFormat.format(receiptDate))
         paired("Waktu", timeFormat.format(receiptDate))
         if (receipt.isKasbon) {
-            paired("Status", "KASBON (BELUM LUNAS)", isBold = true)
+            paired("Status", "BELUM LUNAS", isBold = true)
             if (receipt.customerName.isNotBlank()) {
                 paired("Pelanggan", receipt.customerName, isBold = true)
             }
         } else {
-            paired("Status", "LUNAS (TUNAI)")
+            paired("Status", "LUNAS")
             if (receipt.customerName.isNotBlank()) {
                 paired("Pelanggan", receipt.customerName)
             }
         }
         rows += Row(rule = true, spaceBefore = 8)
 
-        center("Barang (${receipt.items.size})", isBold = true, before = 2)
+        center("Daftar Barang (${receipt.items.size})", isBold = true, before = 2)
         receipt.items.forEachIndexed { index, item ->
             left("${index + 1}. ${item.name.ifBlank { "Barang" }}", isBold = true, before = if (index == 0) 2 else 6)
             paired("${item.quantity} × ${money(item.price)}", money(item.total))
@@ -132,7 +132,7 @@ object ReceiptRenderer {
 
         rows += Row(rule = true, spaceBefore = 8)
         left("Ringkasan", isBold = true, before = 2)
-        paired("Total kuantitas", "${receipt.items.sumOf { it.quantity }} pcs")
+        paired("Total barang", "${receipt.items.sumOf { it.quantity }} item")
         paired("Subtotal", money(receipt.subtotal))
         if (receipt.taxPercent > 0.0 || receipt.taxAmount > 0) {
             paired("Pajak ${percent(receipt.taxPercent)}%", money(receipt.taxAmount))
@@ -142,11 +142,12 @@ object ReceiptRenderer {
         }
 
         rows += Row(rule = true, spaceBefore = 6)
-        rows += Row(left = "TOTAL BAYAR", right = money(receipt.total), bold = true, total = true, spaceBefore = 2)
+        rows += Row(left = "TOTAL", bold = true, large = true, spaceBefore = 2)
+        rows += Row(right = money(receipt.total), bold = true, total = true, spaceBefore = 0)
         if (receipt.isKasbon) {
-            center("*** BELUM LUNAS (KASBON) ***", isBold = true, before = 4)
+            center("*** BELUM LUNAS ***", isBold = true, before = 4)
         } else if (receipt.paidCash > 0) {
-            paired("Bayar tunai", money(receipt.paidCash), before = 3)
+            paired("Tunai", money(receipt.paidCash), before = 3)
             paired("Kembalian", money(receipt.changeAmount), isBold = true)
         }
         rows += Row(rule = true, spaceBefore = 6)

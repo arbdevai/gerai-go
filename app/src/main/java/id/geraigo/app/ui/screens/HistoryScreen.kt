@@ -34,12 +34,12 @@ fun HistoryScreen(
     onMarkPaid: (OrderReceipt) -> Unit
 ) {
     var dateDialog by remember { mutableStateOf(false) }
-    var statusFilter by remember { mutableStateOf("ALL") } // "ALL", "PAID", "KASBON"
+    var statusFilter by remember { mutableStateOf("ALL") } // "ALL", "PAID", "UNPAID"
 
     val displayedOrders = remember(orders, statusFilter) {
         when (statusFilter) {
             "PAID" -> orders.filter { !it.isKasbon }
-            "KASBON" -> orders.filter { it.isKasbon }
+            "UNPAID" -> orders.filter { it.isKasbon }
             else -> orders
         }
     }
@@ -49,13 +49,13 @@ fun HistoryScreen(
             .fillMaxSize()
             .padding(horizontal = 18.dp)
     ) {
-        ScreenHeader("Riwayat", "Cari dan kelola riwayat transaksi")
+        ScreenHeader("Riwayat", "Daftar semua transaksi")
 
         OutlinedTextField(
             value = query,
             onValueChange = onQuery,
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Cari nama barang, pelanggan, atau catatan") },
+            placeholder = { Text("Cari barang, nama, catatan...") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             trailingIcon = {
                 if (query.isNotEmpty()) {
@@ -87,9 +87,9 @@ fun HistoryScreen(
                 label = { Text("Lunas") }
             )
             FilterChip(
-                selected = statusFilter == "KASBON",
-                onClick = { statusFilter = "KASBON" },
-                label = { Text("Kasbon") }
+                selected = statusFilter == "UNPAID",
+                onClick = { statusFilter = "UNPAID" },
+                label = { Text("Belum Lunas") }
             )
             Spacer(Modifier.weight(1f))
             Text("${displayedOrders.size}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
@@ -115,7 +115,7 @@ fun HistoryScreen(
         Spacer(Modifier.height(8.dp))
 
         if (displayedOrders.isEmpty()) {
-            EmptyState("Tidak ada transaksi ditemukan", "Ubah kata kunci pencarian, status kasbon, atau tanggal filter.")
+            EmptyState("Tidak Ada Transaksi", "Coba ubah kata kunci atau tanggal.")
         } else {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -146,13 +146,13 @@ fun HistoryScreen(
                                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                                     if (order.isKasbon) {
                                         DropdownMenuItem(
-                                            text = { Text("Tandai Sudah Lunas", color = Color(0xFF16A34A), fontWeight = FontWeight.SemiBold) },
+                                            text = { Text("Tandai Lunas", color = Color(0xFF16A34A), fontWeight = FontWeight.SemiBold) },
                                             leadingIcon = { Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF16A34A)) },
                                             onClick = { menuOpen = false; onMarkPaid(order) }
                                         )
                                     }
                                     DropdownMenuItem(
-                                        text = { Text("Lihat nota") },
+                                        text = { Text("Lihat Struk") },
                                         leadingIcon = { Icon(Icons.Default.ReceiptLong, null) },
                                         onClick = { menuOpen = false; onReceipt(order) }
                                     )

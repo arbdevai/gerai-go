@@ -107,10 +107,10 @@ fun SettingsScreen(
             .padding(horizontal = 18.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        ScreenHeader("Pengaturan", "Identitas toko, format nota, dan cadangan data")
+        ScreenHeader("Pengaturan", "Toko, struk, dan data")
 
         // Store identity
-        Text("Informasi Toko", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp)
+        Text("Profil Toko", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp)
         SettingInput("Nama toko", model.name) { model = model.copy(name = it) }
         SettingInput("Alamat", model.address, singleLine = false) { model = model.copy(address = it) }
         SettingInput("Nomor kontak", model.contact, keyboard = KeyboardType.Phone) { model = model.copy(contact = it) }
@@ -118,7 +118,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(16.dp))
 
         // Receipt layout
-        Text("Tampilan Nota", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp)
+        Text("Format Struk", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp)
         SettingInput("Teks header", model.header, singleLine = false) { model = model.copy(header = it) }
         SettingInput("Footer nota", model.footer, singleLine = false) { model = model.copy(footer = it) }
 
@@ -176,7 +176,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(16.dp))
 
         // Tax & Admin Fees
-        Text("Pajak & Biaya Admin", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp)
+        Text("Pajak & Admin", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp)
         SettingSwitch("Aktifkan pajak", model.taxEnabled) {
             model = model.copy(taxEnabled = it)
             onNotice(if (it) "Pajak aktif untuk transaksi baru setelah disimpan." else "Pajak nonaktif untuk transaksi baru.")
@@ -223,7 +223,7 @@ fun SettingsScreen(
         ) {
             Icon(Icons.Default.BluetoothSearching, null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Pilih printer tersanding")
+            Text("Pilih Printer Bluetooth")
         }
 
         Spacer(Modifier.height(12.dp))
@@ -236,13 +236,13 @@ fun SettingsScreen(
         ) {
             Icon(Icons.Default.Save, null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Simpan pengaturan nota")
+            Text("Simpan Pengaturan")
         }
 
         Spacer(Modifier.height(24.dp))
 
         // Backup
-        Text("Cadangan & Sinkronisasi", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp)
+        Text("Cadangan Data (Backup)", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp)
         Text(
             "${orders.size} transaksi · Salinan otomatis berkala tersimpan di Documents/Gerai Go.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -353,7 +353,7 @@ fun SettingsScreen(
         ) {
             Icon(Icons.Default.SystemUpdate, null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Periksa Pembaruan")
+            Text("Cek Versi Baru")
         }
 
         Spacer(Modifier.height(100.dp))
@@ -367,7 +367,7 @@ fun SettingsScreen(
                 }
             },
             title = {
-                Text("Pembaruan Gerai Go", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Text("Pembaruan Aplikasi", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
             },
             text = {
                 Column(Modifier.fillMaxWidth()) {
@@ -379,11 +379,11 @@ fun SettingsScreen(
                             ) {
                                 CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                                 Spacer(Modifier.width(12.dp))
-                                Text("Memeriksa rilis terbaru...", fontSize = 13.sp)
+                                Text("Memeriksa versi baru...", fontSize = 13.sp)
                             }
                         }
                         is UpdateUiState.Available -> {
-                            Text("Versi ${state.versionName} tersedia untuk diunduh.", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                            Text("Versi ${state.versionName} tersedia.", fontWeight = FontWeight.Medium, fontSize = 14.sp)
                             Spacer(Modifier.height(6.dp))
                             val apkSizeMb = String.format(Locale.US, "%.1f", state.apkSize / (1024f * 1024f))
                             Text(
@@ -393,7 +393,7 @@ fun SettingsScreen(
                             )
                             if (state.releaseNotes.isNotBlank()) {
                                 Spacer(Modifier.height(8.dp))
-                                Text("Catatan Rilis:", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                Text("Apa yang baru:", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                                 Text(
                                     state.releaseNotes,
                                     fontSize = 12.sp,
@@ -421,14 +421,14 @@ fun SettingsScreen(
                         }
                         is UpdateUiState.ReadyToInstall -> {
                             Text(
-                                "Berkas APK pembaruan berhasil diunduh dan lolos verifikasi integritas.",
+                                "Pembaruan siap dipasang.",
                                 fontSize = 13.sp,
                                 color = Color(0xFF2E7D32)
                             )
                         }
                         is UpdateUiState.UpToDate -> {
                             Text(
-                                "Aplikasi Gerai Go sudah menggunakan versi paling baru (v${state.currentVersion}).",
+                                "Aplikasi sudah versi terbaru (v${state.currentVersion}).",
                                 fontSize = 13.sp,
                                 color = Color(0xFF2E7D32)
                             )
@@ -465,7 +465,7 @@ fun SettingsScreen(
                                 }
                             }
                         ) {
-                            Text("Unduh Sekarang")
+                            Text("Unduh Update")
                         }
                     }
                     is UpdateUiState.ReadyToInstall -> {
@@ -475,7 +475,7 @@ fun SettingsScreen(
                                 updateDialogOpen = false
                             }
                         ) {
-                            Text("Pasang Pembaruan")
+                            Text("Pasang Sekarang")
                         }
                     }
                     else -> {

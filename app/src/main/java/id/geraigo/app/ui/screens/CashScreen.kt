@@ -45,7 +45,7 @@ fun CashScreen(
             .fillMaxSize()
             .padding(horizontal = 18.dp)
     ) {
-        ScreenHeader("Kas hari ini", "Semua transaksi tersimpan di perangkat")
+        ScreenHeader("Penjualan Hari Ini", "Ringkasan transaksi hari ini")
 
         if (isLoading) {
             CashScreenSkeleton()
@@ -67,7 +67,7 @@ fun CashScreen(
                 ) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "TOTAL PEMASUKAN TUNAI",
+                            "TOTAL PENJUALAN",
                             Modifier.weight(1f),
                             color = Color.White.copy(alpha = 0.8f),
                             fontSize = 11.sp,
@@ -87,7 +87,7 @@ fun CashScreen(
                     Spacer(Modifier.height(10.dp))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "${todayPaid.size} lunas",
+                            "${todayPaid.size} transaksi",
                             color = Color.White,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold
@@ -100,7 +100,7 @@ fun CashScreen(
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                "Kasbon: ${rupiah(todayKasbon.sumOf { it.total })} (${todayKasbon.size})",
+                                "Belum lunas: ${rupiah(todayKasbon.sumOf { it.total })} (${todayKasbon.size} nota)",
                                 color = Color(0xFFFFD166),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold
@@ -146,7 +146,7 @@ fun CashScreen(
             Spacer(Modifier.height(8.dp))
 
             if (orders.isEmpty()) {
-                EmptyState("Belum ada transaksi", "Tekan tombol + di bawah untuk mulai mencatat penjualan.")
+                EmptyState("Belum Ada Penjualan", "Tekan tombol + untuk mulai transaksi.")
             } else {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -215,7 +215,7 @@ fun SaleRow(order: OrderReceipt, onClick: () -> Unit, modifier: Modifier = Modif
                             shape = RoundedCornerShape(6.dp)
                         ) {
                             Text(
-                                "KASBON",
+                                "BELUM LUNAS",
                                 color = Color(0xFFE07A5F),
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
